@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+{% from '_macros.html' import sentiment_pill, category_pill %}
+
+{% block title %}Analysis — ReviewBridge{% endblock %}
+{% block body_attrs %} data-charts-enabled="true"{% endblock %}
+
+{% block content %}
+<header class="rb-page-header">
+  <div class="rb-page-header-top">
+    <div>
+      <p class="rb-eyebrow mb-2">Workspace</p>
+      <h1 class="rb-page-title">Analysis</h1>
+      <p class="rb-page-subtitle">Fetch Google Play reviews, run sentiment analysis, and route tickets—all in one place.</p>
+    </div>
+    <div class="rb-page-actions">
+      {% if has_dashboard_export_data %}
+      <div class="dropdown">
+        <button class="btn btn-sm rb-btn-outline dropdown-toggle" type="button" data-bs-toggle="dropdown">Download</button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{{ url_for('main.export_dashboard_csv', since=dashboard_since_iso) }}">CSV</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('main.export_dashboard_xlsx', since=dashboard_since_iso) }}">Excel</a></li>
+        </ul>
+      </div>
+      {% endif %}
+      <form action="{{ url_for('main.clear_dashboard') }}" method="post" class="m-0">
+        <button class="btn btn-sm rb-btn-outline" type="submit">Clear batch</button>
+      </form>
+      <div class="rb-context-pill">
+        <span class="rb-context-label">{{ active_context_title }}</span>
+        <img src="{{ current_app_icon }}" alt="" class="app-icon-sm" onerror="this.style.display='none'">
+        <span class="fw-semibold">{{ current_app_label }}</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="analysis-empty-onboarding" class="rb-card rb-onboarding-card analysis-empty-onboarding mb-4" aria-labelledby="analysis-empty-title">
+  <div class="rb-card-body rb-onboarding-body">
+    <div class="rb-onboarding-toolbar">
+      <div class="rb-onboarding-meta min-w-0">
+        <span class="rb-eyebrow rb-eyebrow-dark rb-onboarding-eyebrow">Get started</span>
+        <h2 id="analysis-empty-title" class="rb-onboarding-title mb-0">Run your first analysis</h2>
+      </div>
+      <div class="rb-onboarding-actions d-flex flex-wrap gap-2">
+        <a href="#dataImportCard" class="btn btn-sm rb-btn-primary">Go to data import</a>
+        <a href="{{ url_for('main.history') }}" class="btn btn-sm rb-btn-outline">View history</a>
+      </div>
+    </div>
+    <p class="rb-onboarding-lead text-muted mb-2">Fetch reviews, analyze sentiment, and generate actionable tickets.</p>
+    <ol class="analysis-onboarding-steps rb-onboarding-stepper list-unstyled mb-0">
+      <li class="analysis-onboarding-step" title="Search Google Play or use a quick pick beside import. Set store region to match your device.">
+        <span class="analysis-onboarding-num">1</span>
+        <div class="rb-onboarding-step-text">
+          <strong>Select app</strong>
+          <p class="text-muted small mb-0">Search Google Play or use a quick pick beside import. Set store region to match your device.</p>
+        </div>
+      </li>
+      <li class="analysis-onboarding-step" title="Import live Play reviews or upload a CSV for offline analysis.">
+        <span class="analysis-onboarding-num">2</span>
+        <div class="rb-onboarding-step-text">
+          <strong>Import reviews</strong>
+          <p class="text-muted small mb-0">Import live Play reviews or upload a CSV for offline analysis.</p>
+        </div>
+      </li>
+      <li class="analysis-onboarding-step" title="Charts, sentiment breakdown, and Jira/Zendesk recommendations appear after analysis completes.">
+        <span class="analysis-onboarding-num">3</span>
+        <div class="rb-onboarding-step-text">
+          <strong>View insights</strong>
+          <p class="text-muted small mb-0">Charts, sentiment breakdown, and Jira/Zendesk recommendations appear here after analysis completes.</p>
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<div class="row g-4 mb-4 rb-import-quick-row rb-import-quick-row--content-sized align-items-start">
+  <div class="col-lg-8">
+<div class="rb-card rb-import-card mb-0" id="dataImportCard">
+  <div class="rb-card-header rb-import-card-header">
+    <h2 class="rb-import-title h5 mb-1">Import reviews</h2>
+    <p class="rb-import-subtitle text-muted small mb-0">Fetch from Google Play or upload a CSV file</p>
+  </div>
+  <div class="rb-card-body">
+    <div class="rb-import-tabs" role="tablist" aria-label="Import method">
+      <button type="button" class="rb-import-tab is-active" role="tab" aria-selected="true" aria-controls="importPanelPlay" data-import-tab="play" id="importTabPlay">Google Play</button>
+      <button type="button" class="rb-import-tab" role="tab" aria-selected="false" aria-controls="importPanelCsv" data-import-tab="csv" id="importTabCsv">Upload CSV</button>
+    </div>
+
+    <div id="importPanelPlay" class="rb-import-panel is-active" role="tabpanel" aria-labelledby="importTabPlay">
+      <form id="liveFetchForm" action="{{ url_for('main.start_fetch_from_google_play') }}" method="post">
+        <input type="hidden" id="packageNameInput" name="package_name" required>
+        <input type="hidden" id="appNameInput" name="app_name">
+        <input type="hidden" id="appIconInput" name="app_icon" value="">
+        <input type="hidden" name="lang" id="fetchLangHidden" value="">
+        <input type="hidden" name="sort" id="fetchSortHidden" value="newest">
+        <input type="hidden" name="fetch_all" id="fetchAllFlag" value="">
+
+        <div class="mb-3">
+          <label class="form-label" for="appSearchInput">App</label>
+          <div class="app-search-wrap position-relative">
+            <input type="text" id="appSearchInput" class="form-control rb-import-input" placeholder="Search by app name on Google Play" autocomplete="off" data-default-apps='{{ popular_apps|tojson }}'>
+            <div id="appSuggestions" class="app-suggestions-panel suggestions-dropdown d-none" role="listbox" aria-label="App suggestions"></div>
+          </div>
+          <span id="selectedAppPreview" class="rb-selected-app-chip d-none" role="status"></span>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-4">
+            <label class="form-label" for="countInput">Reviews to fetch</label>
+            <input type="number" id="countInput" name="count" class="form-control rb-import-input" value="100" min="1" step="1" inputmode="numeric">
+            <p class="rb-import-hint mb-0">No upper limit; very large counts take longer to download and analyze.</p>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label" for="fetchCountryInput">Store region</label>
+            <select id="fetchCountryInput" name="country" class="form-select rb-import-input">
+              <option value="us" selected>United States</option>
+              <option value="pk">Pakistan</option>
+              <option value="gb">United Kingdom</option>
+              <option value="in">India</option>
+              <option value="ae">UAE</option>
+              <option value="de">Germany</option>
+              <option value="br">Brazil</option>
+              <option value="id">Indonesia</option>
+              <option value="jp">Japan</option>
+              <option value="fr">France</option>
+              <option value="ca">Canada</option>
+              <option value="au">Australia</option>
+              <option value="ww">Worldwide (fetch all only)</option>
+            </select>
+            <p class="rb-import-hint mb-0">Match your device’s Play country; compare using <strong>Newest</strong> on Play.</p>
+          </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <button type="submit" class="btn rb-btn-primary" id="btnFetchLimited">Fetch &amp; analyze</button>
+          <button type="button" class="btn rb-btn-outline" id="btnFetchAllReviews">Fetch all reviews</button>
+        </div>
+
+        <div class="form-check form-switch mb-2">
+          <input class="form-check-input" type="checkbox" id="toggleAdvancedOptionsSwitch">
+          <label class="form-check-label small" for="toggleAdvancedOptionsSwitch">Advanced options</label>
+        </div>
+        <div id="advancedOptionsPanel" class="rb-import-advanced d-none">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Package name</label>
+              <input type="text" id="packageNameManual" class="form-control rb-import-input advanced-field" placeholder="com.example.app">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Language</label>
+              <input type="text" id="fetchLangInput" class="form-control rb-import-input advanced-field" value="" placeholder="All languages">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Sort</label>
+              <select id="fetchSortInput" class="form-select rb-import-input advanced-field">
+                <option value="newest" selected>Newest</option>
+                <option value="rating">Rating</option>
+                <option value="helpfulness">Helpfulness</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div id="importPanelCsv" class="rb-import-panel d-none" role="tabpanel" aria-labelledby="importTabCsv">
+      <form id="csvUploadForm" action="{{ url_for('main.start_csv_upload') }}" method="post" enctype="multipart/form-data">
+        <div class="mb-3">
+          <label class="form-label" for="csvAppNameInput">App name</label>
+          <input type="text" id="csvAppNameInput" name="app_name" class="form-control rb-import-input" value="My App" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="csvFileInput">CSV file</label>
+          <label class="rb-file-upload" for="csvFileInput">
+            <span class="rb-file-upload-label">Choose a CSV file</span>
+            <span class="rb-file-upload-name" id="csvFileName">No file chosen</span>
+            <input type="file" id="csvFileInput" name="review_file" accept=".csv" class="rb-file-upload-input" required>
+          </label>
+          <p class="rb-import-hint mb-0">Columns: author, rating, content</p>
+        </div>
+        <button type="submit" class="btn rb-btn-primary w-100 w-md-auto" id="btnCsvUpload">Analyze CSV</button>
+      </form>
+    </div>
+  </div>
+</div>
+  </div>
+  <div class="col-lg-4">
+<div class="rb-card mb-0" id="quickPicksCard">
+  <div class="rb-card-header rb-import-card-header">
+    <div>
+      <h2 class="rb-import-title h5 mb-1">Quick picks</h2>
+      <p class="rb-import-subtitle text-muted small mb-0">Instant fetch for popular apps</p>
+    </div>
+  </div>
+  <div class="rb-card-body">
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" id="quickPickFetchAllToggle">
+      <label class="form-check-label small" for="quickPickFetchAllToggle">Use Fetch all reviews for quick picks</label>
+    </div>
+    <div class="quick-picks-scroll" role="region" aria-label="Popular app shortcuts" tabindex="0">
+      <div class="quick-picks-grid">
+        {% for app in popular_apps %}
+          <button type="button" class="btn btn-light text-start popular-app-btn quick-pick-card d-flex align-items-center gap-2" data-package="{{ app.package_name }}" data-app-name="{{ app.app_name }}">
+            <img src="{{ app.icon }}" alt="{{ app.app_name }}" class="app-icon" onerror="this.style.display='none'">
+            <span class="min-w-0 flex-grow-1">
+              <div class="fw-semibold text-truncate">{{ app.app_name }}</div>
+              <small class="text-muted text-truncate d-block">{{ app.package_name }}</small>
+            </span>
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+  </div>
+</div>
+
+<div id="analysisPipelineCard" class="analysis-pipeline-card rb-card rb-pipeline-card mb-4 is-idle" data-active-job-id="{{ active_fetch_job_id or '' }}" data-has-review-results="{{ 'true' if has_review_results else 'false' }}" data-pipeline-snapshot='{{ pipeline_snapshot|tojson if pipeline_snapshot else "null" }}'>
+  <div class="rb-card-body rb-pipeline-body">
+    <div class="rb-pipeline-toolbar">
+      <img id="pipelineAppIcon" src="https://cdn.simpleicons.org/googleplay/34A853" alt="" class="pipeline-app-icon" onerror="this.style.display='none'">
+      <div class="rb-pipeline-meta min-w-0">
+        <span class="rb-eyebrow rb-eyebrow-dark rb-pipeline-eyebrow">Pipeline</span>
+        <div class="rb-pipeline-title-row">
+          <span id="pipelineAppName" class="rb-pipeline-app-name">App</span>
+          <span id="pipelineStatusBadge" class="badge rounded-pill text-bg-secondary">Ready</span>
+        </div>
+      </div>
+      <div class="rb-pipeline-actions">
+        <span id="pipelineProgressPercent" class="pipeline-percent">0%</span>
+      </div>
+    </div>
+    <div class="rb-pipeline-status-block">
+      <p id="pipelineCurrentAction" class="pipeline-current rb-pipeline-message mb-2">No analysis running. Start a fetch or upload above.</p>
+      <div class="progress pipeline-progress mb-0" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="pipelineProgressBar" class="progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+    <ul id="pipelineSteps" class="pipeline-steps rb-pipeline-stepper list-unstyled mb-2">
+      <li class="pipeline-step is-pending" data-phase="prepare" title="Connecting to Google Play">
+        <span class="pipeline-step-icon" aria-hidden="true"></span>
+        <span class="pipeline-step-text">
+          <span class="pipeline-step-title">Prepare</span>
+          <span class="pipeline-step-desc" data-play="Connecting to Google Play" data-csv="Reading CSV file">Connecting to Google Play</span>
+        </span>
+      </li>
+      <li class="pipeline-step is-pending" data-phase="load" title="Downloading reviews from Play Store">
+        <span class="pipeline-step-icon" aria-hidden="true"></span>
+        <span class="pipeline-step-text">
+          <span class="pipeline-step-title">Load</span>
+          <span class="pipeline-step-desc" data-play="Downloading reviews from Play Store" data-csv="Parsing CSV rows">Downloading reviews from Play Store</span>
+        </span>
+      </li>
+      <li class="pipeline-step is-pending" data-phase="analyzing" title="Sentiment detection and category classification">
+        <span class="pipeline-step-icon" aria-hidden="true"></span>
+        <span class="pipeline-step-text">
+          <span class="pipeline-step-title">Analyze</span>
+          <span class="pipeline-step-desc">Sentiment detection &amp; category classification</span>
+        </span>
+      </li>
+      <li class="pipeline-step is-pending" data-phase="ticketing" title="Jira for bugs/features, Zendesk for support">
+        <span class="pipeline-step-icon" aria-hidden="true"></span>
+        <span class="pipeline-step-text">
+          <span class="pipeline-step-title">Tickets</span>
+          <span class="pipeline-step-desc">Jira for bugs/features, Zendesk for support</span>
+        </span>
+      </li>
+      <li class="pipeline-step is-pending" data-phase="finalize" title="Saving results to dashboard">
+        <span class="pipeline-step-icon" aria-hidden="true"></span>
+        <span class="pipeline-step-text">
+          <span class="pipeline-step-title">Finish</span>
+          <span class="pipeline-step-desc">Saving results to dashboard</span>
+        </span>
+      </li>
+    </ul>
+    <div id="pipelineStats" class="pipeline-stats rb-pipeline-stats">
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Downloaded</span><strong id="statFetched">0</strong></div>
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Analyzed</span><strong id="statProcessed">0</strong></div>
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Refreshed</span><strong id="statRefreshed">0</strong></div>
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Skipped</span><strong id="statSkipped">0</strong></div>
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Jira</span><strong id="statJira">0</strong></div>
+      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Zendesk</span><strong id="statZendesk">0</strong></div>
+    </div>
+  </div>
+</div>
+
+<div id="dashboardMainContent" class="{% if active_fetch_job_id %}analysis-backdrop-active{% endif %}">
+
+<div id="dashboardTopMetrics" class="rb-metric-grid mb-4">
+  <div class="rb-metric-tile"><span class="label">Total reviews</span><strong>{{ stats.total_reviews }}</strong></div>
+  <div class="rb-metric-tile"><span class="label">Overall rating</span><strong>{{ stats.avg_rating }}<small class="fs-6 fw-normal opacity-75"> / 5</small></strong></div>
+  <div class="rb-metric-tile"><span class="label">Jira tickets</span><strong>{{ stats.jira }}</strong></div>
+  <div class="rb-metric-tile"><span class="label">Zendesk tickets</span><strong>{{ stats.zendesk }}</strong></div>
+</div>
+
+<div class="row g-4 mb-4" id="liveAnalysisPanels">
+  <div class="col-lg-8">
+    <div class="rb-overview-shell analysis-overview-card h-100">
+      <div class="rb-overview-metric-band">
+        <div class="rb-insight-metric"><span>Total reviews</span><strong>{{ stats.total_reviews }}</strong></div>
+        <div class="rb-insight-metric"><span>Avg rating</span><strong>{{ stats.avg_rating }} / 5</strong></div>
+        <div class="rb-insight-metric"><span>Positive</span><strong>{{ percentages.positive }}%</strong></div>
+      </div>
+      <div class="rb-overview-body">
+        <p class="rb-eyebrow rb-eyebrow-dark mb-3">Charts — {{ current_app_label }}</p>
+        <div class="row g-3 align-items-stretch mb-3">
+          <div class="col-md-6">
+            <div class="chart-wrap chart-wrap-donut">
+              <canvas id="sentimentChart" data-positive="{{ stats.positive }}" data-negative="{{ stats.negative }}" data-neutral="{{ stats.neutral }}"></canvas>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="chart-wrap chart-wrap-bar">
+              <canvas id="categoryChart" data-bugs="{{ stats.bugs }}" data-features="{{ stats.features }}" data-support="{{ stats.support }}" data-complaints="{{ stats.complaints }}"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="percent-bars-inline">
+          <div class="percent-bar-row">
+            <span class="percent-bar-label">Positive</span>
+            <div class="percent-bar-track"><div class="percent-bar-fill fill-positive" style="width: {{ percentages.positive }}%"></div></div>
+            <span class="percent-bar-value">{{ percentages.positive }}%</span>
+          </div>
+          <div class="percent-bar-row">
+            <span class="percent-bar-label">Negative</span>
+            <div class="percent-bar-track"><div class="percent-bar-fill fill-negative" style="width: {{ percentages.negative }}%"></div></div>
+            <span class="percent-bar-value">{{ percentages.negative }}%</span>
+          </div>
+          <div class="percent-bar-row">
+            <span class="percent-bar-label">Neutral</span>
+            <div class="percent-bar-track"><div class="percent-bar-fill fill-neutral" style="width: {{ percentages.neutral }}%"></div></div>
+            <span class="percent-bar-value">{{ percentages.neutral }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="rb-card h-100 tickets-panel-card">
+      <div class="rb-card-header">
+        <strong>Tickets</strong>
+        <span class="badge rounded-pill text-bg-primary">{{ tickets|length }}</span>
+      </div>
+      <ul class="list-group list-group-flush tickets-scroll">
+        {% for ticket in tickets %}
+          <li class="list-group-item ticket-row">
+            <div class="d-flex justify-content-between align-items-start gap-2">
+              <span class="ticket-platform {% if ticket.platform == 'Jira' %}text-jira{% else %}text-zendesk{% endif %}">{{ ticket.platform }}</span>
+              <code class="ticket-id small">{{ ticket.external_ticket_id }}</code>
+            </div>
+            <div class="ticket-title small text-muted mt-1">{{ ticket.title }}</div>
+          </li>
+        {% else %}
+          <li class="list-group-item text-muted text-center py-4">No tickets in this batch.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="rb-card reviews-panel-card">
+  <div class="rb-card-header">
+    <div>
+      <p class="rb-eyebrow rb-eyebrow-dark mb-1">Batch</p>
+      <strong>Latest reviews — {{ current_app_label }}</strong>
+    </div>
+    <span class="badge rounded-pill text-bg-secondary">{{ reviews|length }} rows</span>
+  </div>
+  <div class="table-responsive reviews-table-wrap">
+    <table class="table table-sm align-middle mb-0 reviews-table rb-table">
+      <thead class="sticky-top"><tr><th>Author</th><th>Date</th><th>Rating</th><th>Sentiment</th><th>Category</th><th>Review</th></tr></thead>
+      <tbody>
+        {% for review in reviews %}
+          <tr>
+            <td class="text-nowrap">{{ review.author }}</td>
+            <td class="text-nowrap text-muted small">{% if review.reviewed_at %}<span title="{{ review.reviewed_at | review_date_title }}">{{ review.reviewed_at | review_date_display }}</span>{% elif review.created_at %}<span title="Import time (review date unavailable)">{{ review.created_at | review_date_display }}</span>{% else %}—{% endif %}</td>
+            <td>{{ review.rating }}/5</td>
+            <td>{{ sentiment_pill(review.sentiment) }}</td>
+            <td>{{ category_pill(review.category) }}</td>
+            <td class="review-cell-wrap"><span class="review-snippet">{{ review.content }}</span></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-center py-4 text-muted">No reviews. Run a fetch or upload.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+{% endblock %}

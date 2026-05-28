@@ -1,0 +1,51 @@
+import hashlib
+from textblob import TextBlob
+
+CATEGORY_RULES = {
+    "bug": ["bug", "crash", "error", "stuck", "freeze", "lag", "issue", "failed"],
+    "feature_request": ["add", "feature", "please include", "need", "wish", "would be great"],
+    "support": ["help", "support", "account", "login", "payment", "subscription", "refund"],
+    "complaint": ["bad", "worst", "hate", "terrible", "poor", "disappointed", "slow"],
+}
+
+
+def stable_review_id(author: str, content: str, rating: int) -> str:
+    key = f"{author.strip().lower()}|{content.strip().lower()}|{rating}"
+    return hashlib.md5(key.encode("utf-8")).hexdigest()
+
+
+def review_storage_id(
+    app_name: str,
+    play_review_id: str | None,
+    author: str,
+    content: str,
+    rating: int,
+) -> str:
+    if play_review_id and str(play_review_id).strip():
+        return f"play:{str(play_review_id).strip()}"
+    app_key = (app_name or "").strip().lower()
+    return f"{app_key}:{stable_review_id(author, content, rating)}"
+
+
+def analyze_sentiment(text: str) -> tuple[str, float]:
+    polarity = TextBlob(text).sentiment.polarity
+    if polarity > 0.15:
+        return "positive", min(1.0, 0.5 + polarity)
+    if polarity < -0.15:
+        return "negative", min(1.0, 0.5 + abs(polarity))
+    return "neutral", 0.55
+
+
+def classify_category(text: str, rating: int, sentiment: str) -> str:
+    lowered = text.lower()
+    for category, words in CATEGORY_RULES.items():
+        if any(word in lowered for word in words):
+            return category
+
+    if rating <= 2 and sentiment == "negative":
+        return "complaint"
+    if rating >= 4 and "feature" in lowered:
+        return "feature_request"
+    if sentiment == "negative":
+        return "support"
+    return "feature_request" if "could" in lowered or "should" in lowered else "support"

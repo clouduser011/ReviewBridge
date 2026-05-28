@@ -1,0 +1,14 @@
+{% macro sentiment_pill(sentiment) -%}
+  {% if sentiment == 'positive' %}<span class="sent-pill sent-positive">{{ sentiment }}</span>
+  {% elif sentiment == 'negative' %}<span class="sent-pill sent-negative">{{ sentiment }}</span>
+  {% elif sentiment == 'neutral' %}<span class="sent-pill sent-neutral">{{ sentiment }}</span>
+  {% else %}<span class="sent-pill sent-other">{{ sentiment }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro category_pill(category) -%}
+  {% if category == 'complaint' %}<span class="cat-pill cat-complaint">{{ category }}</span>
+  {% elif category == 'support' %}<span class="cat-pill cat-support">{{ category }}</span>
+  {% elif category == 'bug' %}<span class="cat-pill cat-bug">{{ category }}</span>
+  {% elif category == 'feature_request' %}<span class="cat-pill cat-feature">{{ category }}</span>
+  {% else %}<span class="cat-pill cat-default">{{ category }}</span>{% endif %}
+{%- endmacro %}

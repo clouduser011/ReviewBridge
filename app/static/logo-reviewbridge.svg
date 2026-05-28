@@ -1,0 +1,24 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="rbGradA" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <linearGradient id="rbGradB" x1="448" y1="64" x2="64" y2="448" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <filter id="softShadow" x="28" y="28" width="456" height="456" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect x="48" y="48" width="416" height="416" rx="96" fill="#0F172A" filter="url(#softShadow)"/>
+
+  <path d="M128 316C128 262.98 170.98 220 224 220H300C353.02 220 396 262.98 396 316V332H332V316C332 298.327 317.673 284 300 284H224C206.327 284 192 298.327 192 316V332H128V316Z" fill="url(#rbGradB)"/>
+  <path d="M116 196C116 142.98 158.98 100 212 100H288C341.02 100 384 142.98 384 196V212H320V196C320 178.327 305.673 164 288 164H212C194.327 164 180 178.327 180 196V212H116V196Z" fill="url(#rbGradA)"/>
+
+  <rect x="148" y="164" width="52" height="168" rx="24" fill="#E2E8F0"/>
+  <rect x="312" y="164" width="52" height="168" rx="24" fill="#E2E8F0"/>
+  <rect x="198" y="228" width="116" height="40" rx="20" fill="#F8FAFC"/>
+</svg>
