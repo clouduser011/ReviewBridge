@@ -31,55 +31,117 @@
 </header>
 
 {% if app_history %}
-{% for app_group in app_history %}
-  <div class="rb-card mb-4">
-    <div class="rb-card-header app-history-header">
-      <strong>{{ app_group.app_name }}</strong>
-      <span class="badge text-bg-light">Reviews: {{ app_group.reviews|length }} · Tickets: {{ app_group.tickets|length }}</span>
-    </div>
-    <div class="rb-card-body">
-      <div class="row g-4">
-        <div class="col-lg-8">
-          <p class="rb-eyebrow rb-eyebrow-dark mb-2">Reviews</p>
-          <div class="table-responsive">
-            <table class="table align-middle mb-0 rb-table">
-              <thead><tr><th>Time</th><th>Author</th><th>Sentiment</th><th>Category</th><th>Review</th></tr></thead>
-              <tbody>
-                {% for review in app_group.reviews %}
-                <tr>
-                  <td class="text-nowrap small text-muted">{% if review.reviewed_at %}<span title="{{ review.reviewed_at | review_date_title }}">{{ review.reviewed_at | review_date_display }}</span>{% elif review.created_at %}<span title="Import time (review date unavailable)">{{ review.created_at | review_date_display }}</span>{% else %}—{% endif %}</td>
-                  <td>{{ review.author }}</td>
-                  <td>{{ sentiment_pill(review.sentiment) }}</td>
-                  <td>{{ category_pill(review.category) }}</td>
-                  <td class="text-truncate review-cell">{{ review.content }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" class="text-center py-3 text-muted">No reviews for this app.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="col-lg-4">
-          <p class="rb-eyebrow rb-eyebrow-dark mb-2">Tickets</p>
-          <ul class="list-group list-group-flush border rounded-3">
-            {% for ticket in app_group.tickets %}
-              <li class="list-group-item ticket-row">
-                <div class="d-flex justify-content-between align-items-start">
-                  <span class="ticket-platform {% if ticket.platform == 'Jira' %}text-jira{% else %}text-zendesk{% endif %}">{{ ticket.platform }}</span>
-                  <code class="ticket-id small">{{ ticket.external_ticket_id }}</code>
-                </div>
-                <div class="small text-muted mt-1">{{ ticket.title }}</div>
-              </li>
-            {% else %}
-              <li class="list-group-item text-muted">No tickets for this app.</li>
-            {% endfor %}
-          </ul>
-        </div>
+<div class="rb-history-layout" id="historyLayout">
+  <div class="rb-card rb-history-strip-card mb-3">
+    <div class="rb-card-body py-3">
+      <p class="rb-eyebrow rb-eyebrow-dark mb-2">Apps</p>
+      <div class="rb-history-app-strip" id="historyAppStrip" role="tablist" aria-label="Apps">
+        {% for app_group in app_history %}
+        {% set chip_icon = (popular_apps_by_name.get(app_group.app_name) or {}).get('icon') or 'https://cdn.simpleicons.org/googleplay/34A853' %}
+        <button
+          type="button"
+          class="rb-history-app-chip{% if loop.first %} is-active{% endif %}"
+          role="tab"
+          id="history-app-tab-{{ loop.index0 }}"
+          data-app-index="{{ loop.index0 }}"
+          aria-selected="{{ 'true' if loop.first else 'false' }}"
+          aria-controls="history-app-panel-{{ loop.index0 }}"
+          tabindex="{{ '0' if loop.first else '-1' }}"
+        >
+          <img src="{{ chip_icon }}" alt="" class="app-icon-sm rb-history-chip-icon" width="28" height="28" onerror="this.style.display='none'">
+          <span class="rb-history-chip-text">
+            <span class="rb-history-chip-name">{{ app_group.app_name }}</span>
+            <span class="rb-history-chip-meta">{{ app_group.reviews|length }} reviews · {{ app_group.tickets|length }} tickets</span>
+          </span>
+        </button>
+        {% endfor %}
       </div>
     </div>
   </div>
-{% endfor %}
+
+  <div class="rb-history-app-detail" id="historyAppDetail">
+    {% for app_group in app_history %}
+    <div
+      class="rb-history-app-panel{% if not loop.first %} d-none{% endif %}"
+      id="history-app-panel-{{ loop.index0 }}"
+      data-app-panel="{{ loop.index0 }}"
+      role="tabpanel"
+      aria-labelledby="history-app-tab-{{ loop.index0 }}"
+      {% if not loop.first %}hidden{% endif %}
+    >
+      <div class="rb-card app-history-panel-card mb-0">
+        <div class="rb-card-header app-history-header">
+          <strong>{{ app_group.app_name }}</strong>
+          <span class="badge text-bg-light">{{ app_group.reviews|length }} reviews · {{ app_group.tickets|length }} tickets</span>
+        </div>
+        <div class="rb-card-body">
+          <div class="row g-4">
+            <div class="col-lg-8">
+              <div class="rb-card reviews-panel-card h-100 mb-0" data-review-filter-root>
+                <div class="rb-card-header py-2">
+                  <p class="rb-eyebrow rb-eyebrow-dark mb-0">Reviews</p>
+                </div>
+                {% if app_group.reviews %}
+                {% include '_review_filter_toolbar.html' %}
+                {% endif %}
+                <div class="table-responsive reviews-table-wrap rb-history-reviews-scroll">
+                  <table class="table table-sm align-middle mb-0 reviews-table rb-table">
+                    <thead class="sticky-top">
+                      <tr>
+                        <th>Time</th>
+                        <th>Author</th>
+                        <th>Sentiment</th>
+                        <th>Category</th>
+                        <th>Review</th>
+                      </tr>
+                    </thead>
+                    <tbody class="rb-review-filter-body">
+                      {% for review in app_group.reviews %}
+                      <tr class="rb-review-row" data-category="{{ review.category }}" data-sentiment="{{ review.sentiment }}">
+                        <td class="text-nowrap small text-muted">{% if review.reviewed_at %}<span title="{{ review.reviewed_at | review_date_title }}">{{ review.reviewed_at | review_date_display }}</span>{% elif review.created_at %}<span title="Import time (review date unavailable)">{{ review.created_at | review_date_display }}</span>{% else %}—{% endif %}</td>
+                        <td class="text-nowrap rb-review-author">{{ review.author }}</td>
+                        <td>{{ sentiment_pill(review.sentiment) }}</td>
+                        <td>{{ category_pill(review.category) }}</td>
+                        <td class="review-cell-wrap"><span class="review-snippet">{{ review.content }}</span></td>
+                      </tr>
+                      {% else %}
+                      <tr class="rb-review-empty-data"><td colspan="5" class="text-center py-4 text-muted">No reviews for this app.</td></tr>
+                      {% endfor %}
+                      <tr class="rb-review-filter-empty d-none" hidden>
+                        <td colspan="5" class="text-center py-4 text-muted">No reviews match your filters.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-4">
+              <div class="rb-card tickets-panel-card h-100 mb-0">
+                <div class="rb-card-header py-2">
+                  <p class="rb-eyebrow rb-eyebrow-dark mb-0">Tickets</p>
+                </div>
+                <ul class="list-group list-group-flush tickets-scroll rb-history-tickets-scroll">
+                  {% for ticket in app_group.tickets %}
+                  <li class="list-group-item ticket-row">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                      <span class="ticket-platform {% if ticket.platform == 'Jira' %}text-jira{% else %}text-zendesk{% endif %}">{{ ticket.platform }}</span>
+                      <code class="ticket-id small">{{ ticket.external_ticket_id }}</code>
+                    </div>
+                    <div class="ticket-title small text-muted mt-1">{{ ticket.title }}</div>
+                  </li>
+                  {% else %}
+                  <li class="list-group-item text-muted text-center py-4">No tickets for this app.</li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
 {% else %}
   <div class="rb-card rb-empty-state">
     <div class="rb-card-body">
@@ -91,12 +153,12 @@
   </div>
 {% endif %}
 
-<div class="rb-card mt-4">
+<div class="rb-card mt-4 rb-history-logs-card">
   <div class="rb-card-header">
     <strong>System logs</strong>
     <span class="text-muted small">Recent</span>
   </div>
-  <ul class="list-group list-group-flush">
+  <ul class="list-group list-group-flush rb-history-logs-scroll">
     {% for log in logs %}
       <li class="list-group-item small log-row log-row-{{ log.level|default('info') }}">
         <span class="text-muted">{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
@@ -109,4 +171,7 @@
 </div>
 {% endblock %}
 
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/review-filter.js') }}"></script>
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}

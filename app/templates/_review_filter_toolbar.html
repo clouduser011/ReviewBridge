@@ -1,0 +1,15 @@
+{# Scoped inside [data-review-filter-root] — category filter only #}
+<div class="rb-review-filter-toolbar" aria-label="Filter reviews by category">
+  <div class="rb-review-filter-category-wrap">
+    <label class="visually-hidden">Category</label>
+    <select class="form-select form-select-sm rb-review-filter-select" aria-label="Filter by category">
+      <option value="">All categories</option>
+      <option value="bug">Bug</option>
+      <option value="feature_request">Feature request</option>
+      <option value="support">Support</option>
+      <option value="complaint">Complaint</option>
+    </select>
+  </div>
+  <button type="button" class="btn btn-sm rb-btn-outline rb-review-filter-clear d-none" aria-label="Clear filter">Clear</button>
+  <span class="rb-review-filter-count small text-muted" aria-live="polite"></span>
+</div>

@@ -1,5 +1,12 @@
 const PIPELINE_PHASES = ["prepare", "load", "analyzing", "ticketing", "finalize"];
 
+function appendSkipPositiveTickets(formData) {
+  const el = document.getElementById("skipPositiveTicketsSwitch");
+  if (el?.checked) {
+    formData.set("skip_positive_tickets", "1");
+  }
+}
+
 function getStickyNavScrollOffset() {
   const nav = document.getElementById("appNav");
   const navH = nav ? nav.getBoundingClientRect().height : 0;
@@ -83,12 +90,15 @@ function updateAnalysisPipeline(data) {
   const statProcessed = document.getElementById("statProcessed");
   const statRefreshed = document.getElementById("statRefreshed");
   const statSkipped = document.getElementById("statSkipped");
+  const statTicketsNew = document.getElementById("statTicketsNew");
   const statJira = document.getElementById("statJira");
   const statZendesk = document.getElementById("statZendesk");
   if (statFetched) statFetched.textContent = String(data.fetched ?? 0);
   if (statProcessed) statProcessed.textContent = String(data.processed ?? 0);
   if (statRefreshed) statRefreshed.textContent = String(data.refreshed ?? 0);
   if (statSkipped) statSkipped.textContent = String(data.skipped ?? 0);
+  const ticketsNew = (data.jira_tickets ?? 0) + (data.zendesk_tickets ?? 0);
+  if (statTicketsNew) statTicketsNew.textContent = String(ticketsNew);
   if (statJira) statJira.textContent = String(data.jira_tickets ?? 0);
   if (statZendesk) statZendesk.textContent = String(data.zendesk_tickets ?? 0);
 
@@ -746,6 +756,7 @@ function initAnalysisPipeline() {
       const appIcon = formData.get("app_icon") || appIconInput?.value || "";
       formData.set("app_name", appName);
       if (appIcon) formData.set("app_icon", appIcon);
+      appendSkipPositiveTickets(formData);
 
       await startJob("/fetch/start", formData, "Starting Google Play fetch…");
     });
@@ -758,6 +769,7 @@ function initAnalysisPipeline() {
       const formData = new FormData(csvForm);
       const appName = (formData.get("app_name") || "My App").toString().trim();
       formData.set("app_name", appName);
+      appendSkipPositiveTickets(formData);
       await startJob("/upload/start", formData, "Starting CSV analysis…");
     });
   }
@@ -832,7 +844,6 @@ function initAppSuggestions() {
         if (pkgManual) pkgManual.value = packageInput.value;
         updateSelectedAppChip();
         hideSuggestions();
-        form.requestSubmit();
       });
     });
   };
@@ -888,6 +899,13 @@ function initAppSuggestions() {
   });
 }
 
+function initReviewResultsFilter() {
+  const root = document.getElementById("reviewsResultsCard");
+  if (root && typeof window.mountReviewTableFilter === "function") {
+    window.mountReviewTableFilter(root);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   createCharts();
   initQuickPicksHeightSync();
@@ -898,4 +916,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initAdvancedOptionsToggle();
   initAnalysisPipeline();
   initAppSuggestions();
+  initReviewResultsFilter();
 });

@@ -86,6 +86,14 @@
       <button type="button" class="rb-import-tab" role="tab" aria-selected="false" aria-controls="importPanelCsv" data-import-tab="csv" id="importTabCsv">Upload CSV</button>
     </div>
 
+    <div class="rb-import-ticketing-option mb-3">
+      <div class="form-check form-switch">
+        <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitch" value="1">
+        <label class="form-check-label small" for="skipPositiveTicketsSwitch">Skip tickets for positive reviews</label>
+      </div>
+      <p class="rb-import-hint mb-0">Reviews are still imported and analyzed. Off by default.</p>
+    </div>
+
     <div id="importPanelPlay" class="rb-import-panel is-active" role="tabpanel" aria-labelledby="importTabPlay">
       <form id="liveFetchForm" action="{{ url_for('main.start_fetch_from_google_play') }}" method="post">
         <input type="hidden" id="packageNameInput" name="package_name" required>
@@ -131,11 +139,6 @@
           </div>
         </div>
 
-        <div class="d-flex flex-wrap gap-2 mb-3">
-          <button type="submit" class="btn rb-btn-primary" id="btnFetchLimited">Fetch &amp; analyze</button>
-          <button type="button" class="btn rb-btn-outline" id="btnFetchAllReviews">Fetch all reviews</button>
-        </div>
-
         <div class="form-check form-switch mb-2">
           <input class="form-check-input" type="checkbox" id="toggleAdvancedOptionsSwitch">
           <label class="form-check-label small" for="toggleAdvancedOptionsSwitch">Advanced options</label>
@@ -159,6 +162,10 @@
               </select>
             </div>
           </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <button type="submit" class="btn rb-btn-primary" id="btnFetchLimited">Fetch &amp; analyze</button>
+          <button type="button" class="btn rb-btn-outline" id="btnFetchAllReviews">Fetch all reviews</button>
         </div>
       </form>
     </div>
@@ -278,20 +285,14 @@
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Analyzed</span><strong id="statProcessed">0</strong></div>
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Refreshed</span><strong id="statRefreshed">0</strong></div>
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Skipped</span><strong id="statSkipped">0</strong></div>
-      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Jira</span><strong id="statJira">0</strong></div>
-      <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Zendesk</span><strong id="statZendesk">0</strong></div>
+      <div class="pipeline-stat-chip" title="New reviews only; re-fetches do not create more tickets"><span class="pipeline-stat-label">Tickets (new)</span><strong id="statTicketsNew">0</strong></div>
+      <div class="pipeline-stat-chip" title="Jira tickets created this run"><span class="pipeline-stat-label">Jira (new)</span><strong id="statJira">0</strong></div>
+      <div class="pipeline-stat-chip" title="Zendesk tickets created this run"><span class="pipeline-stat-label">Zendesk (new)</span><strong id="statZendesk">0</strong></div>
     </div>
   </div>
 </div>
 
 <div id="dashboardMainContent" class="{% if active_fetch_job_id %}analysis-backdrop-active{% endif %}">
-
-<div id="dashboardTopMetrics" class="rb-metric-grid mb-4">
-  <div class="rb-metric-tile"><span class="label">Total reviews</span><strong>{{ stats.total_reviews }}</strong></div>
-  <div class="rb-metric-tile"><span class="label">Overall rating</span><strong>{{ stats.avg_rating }}<small class="fs-6 fw-normal opacity-75"> / 5</small></strong></div>
-  <div class="rb-metric-tile"><span class="label">Jira tickets</span><strong>{{ stats.jira }}</strong></div>
-  <div class="rb-metric-tile"><span class="label">Zendesk tickets</span><strong>{{ stats.zendesk }}</strong></div>
-</div>
 
 <div class="row g-4 mb-4" id="liveAnalysisPanels">
   <div class="col-lg-8">
@@ -337,55 +338,86 @@
   </div>
   <div class="col-lg-4">
     <div class="rb-card h-100 tickets-panel-card">
-      <div class="rb-card-header">
-        <strong>Tickets</strong>
-        <span class="badge rounded-pill text-bg-primary">{{ tickets|length }}</span>
+      <div class="rb-card-header tickets-panel-header">
+        <div class="tickets-panel-title">
+          <strong>Tickets</strong>
+          <span class="badge rounded-pill text-bg-primary" title="One ticket per review max">{{ tickets|length }}</span>
+        </div>
+        <div class="rb-ticket-platform-strip" aria-label="Tickets by platform">
+          <div class="rb-ticket-platform-chip" title="Jira tickets in this batch">
+            <span class="rb-ticket-platform-chip-label text-jira">Jira</span>
+            <strong>{{ stats.jira }}</strong>
+          </div>
+          <div class="rb-ticket-platform-chip" title="Zendesk tickets in this batch">
+            <span class="rb-ticket-platform-chip-label text-zendesk">Zendesk</span>
+            <strong>{{ stats.zendesk }}</strong>
+          </div>
+        </div>
       </div>
-      <ul class="list-group list-group-flush tickets-scroll">
-        {% for ticket in tickets %}
-          <li class="list-group-item ticket-row">
-            <div class="d-flex justify-content-between align-items-start gap-2">
-              <span class="ticket-platform {% if ticket.platform == 'Jira' %}text-jira{% else %}text-zendesk{% endif %}">{{ ticket.platform }}</span>
-              <code class="ticket-id small">{{ ticket.external_ticket_id }}</code>
-            </div>
-            <div class="ticket-title small text-muted mt-1">{{ ticket.title }}</div>
-          </li>
-        {% else %}
-          <li class="list-group-item text-muted text-center py-4">No tickets in this batch.</li>
-        {% endfor %}
-      </ul>
+      <div class="rb-card-body rb-tickets-panel-body">
+        <div class="tickets-list-wrap tickets-scroll">
+          <ul class="list-group list-group-flush mb-0">
+            {% for ticket in tickets %}
+              <li class="list-group-item ticket-row">
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <span class="ticket-platform {% if ticket.platform == 'Jira' %}text-jira{% else %}text-zendesk{% endif %}">{{ ticket.platform }}</span>
+                  <code class="ticket-id small">{{ ticket.external_ticket_id }}</code>
+                </div>
+                <div class="ticket-title small text-muted mt-1">{{ ticket.title }}</div>
+              </li>
+            {% else %}
+              <li class="list-group-item text-muted text-center py-4">No tickets in this batch.</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
-<div class="rb-card reviews-panel-card">
-  <div class="rb-card-header">
+<div class="rb-card reviews-panel-card" id="reviewsResultsCard" data-review-filter-root>
+  <div class="rb-card-header reviews-panel-header">
     <div>
       <p class="rb-eyebrow rb-eyebrow-dark mb-1">Batch</p>
       <strong>Latest reviews — {{ current_app_label }}</strong>
     </div>
-    <span class="badge rounded-pill text-bg-secondary">{{ reviews|length }} rows</span>
+    <span class="badge rounded-pill text-bg-secondary" id="reviewTotalBadge">{{ reviews|length }} rows</span>
   </div>
-  <div class="table-responsive reviews-table-wrap">
-    <table class="table table-sm align-middle mb-0 reviews-table rb-table">
-      <thead class="sticky-top"><tr><th>Author</th><th>Date</th><th>Rating</th><th>Sentiment</th><th>Category</th><th>Review</th></tr></thead>
-      <tbody>
-        {% for review in reviews %}
-          <tr>
-            <td class="text-nowrap">{{ review.author }}</td>
-            <td class="text-nowrap text-muted small">{% if review.reviewed_at %}<span title="{{ review.reviewed_at | review_date_title }}">{{ review.reviewed_at | review_date_display }}</span>{% elif review.created_at %}<span title="Import time (review date unavailable)">{{ review.created_at | review_date_display }}</span>{% else %}—{% endif %}</td>
-            <td>{{ review.rating }}/5</td>
-            <td>{{ sentiment_pill(review.sentiment) }}</td>
-            <td>{{ category_pill(review.category) }}</td>
-            <td class="review-cell-wrap"><span class="review-snippet">{{ review.content }}</span></td>
+  <div class="rb-card-body rb-analysis-reviews-body">
+    {% if reviews %}
+    {% include '_review_filter_toolbar.html' %}
+    {% endif %}
+    <div class="table-responsive reviews-table-wrap">
+      <table class="table table-sm align-middle mb-0 reviews-table rb-table" id="reviewsResultsTable">
+        <thead class="sticky-top"><tr><th>Author</th><th>Date</th><th>Rating</th><th>Sentiment</th><th>Category</th><th>Review</th></tr></thead>
+        <tbody class="rb-review-filter-body" id="reviewsResultsBody">
+          {% for review in reviews %}
+            <tr class="rb-review-row" data-category="{{ review.category }}" data-sentiment="{{ review.sentiment }}">
+              <td class="text-nowrap rb-review-author">{{ review.author }}</td>
+              <td class="text-nowrap text-muted small">{% if review.reviewed_at %}<span title="{{ review.reviewed_at | review_date_title }}">{{ review.reviewed_at | review_date_display }}</span>{% elif review.created_at %}<span title="Import time (review date unavailable)">{{ review.created_at | review_date_display }}</span>{% else %}—{% endif %}</td>
+              <td>{{ review.rating }}/5</td>
+              <td>{{ sentiment_pill(review.sentiment) }}</td>
+              <td>{{ category_pill(review.category) }}</td>
+              <td class="review-cell-wrap"><span class="review-snippet">{{ review.content }}</span></td>
+            </tr>
+          {% else %}
+            <tr class="rb-review-empty-data"><td colspan="6" class="text-center py-4 text-muted">No reviews. Run a fetch or upload.</td></tr>
+          {% endfor %}
+          <tr class="rb-review-filter-empty d-none" hidden>
+            <td colspan="6" class="text-center py-4 text-muted">No reviews match your filters.</td>
           </tr>
-        {% else %}
-          <tr><td colspan="6" class="text-center py-4 text-muted">No reviews. Run a fetch or upload.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   </div>
+</div>
 </div>
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/review-filter.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

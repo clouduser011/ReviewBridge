@@ -489,9 +489,77 @@
   border: 1px solid #eef2f7;
 }
 
+.tickets-panel-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.tickets-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.rb-ticket-platform-strip {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.rb-ticket-platform-chip {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.rb-ticket-platform-chip-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rb-ticket-platform-chip strong {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
 .tickets-scroll {
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* Analysis tickets list — inset inside card */
+#liveAnalysisPanels .rb-tickets-panel-body {
+  padding-top: 0;
+}
+
+#liveAnalysisPanels .tickets-list-wrap {
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fff;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+#liveAnalysisPanels .tickets-list-wrap .list-group-item:first-child {
+  border-top: none;
+}
+
+#liveAnalysisPanels .tickets-list-wrap .list-group-item:last-child {
+  border-bottom: none;
 }
 
 .ticket-row {
@@ -525,9 +593,107 @@
   border: 1px solid #eef2f7;
 }
 
+.reviews-panel-header {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+#reviewsResultsCard .rb-analysis-reviews-body {
+  padding-top: 0.75rem;
+}
+
+#reviewsResultsCard .rb-review-filter-toolbar {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+#reviewsResultsCard .reviews-table-wrap {
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.rb-review-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  padding: 0.5rem 1rem 0.65rem;
+  border-bottom: 1px solid #eef2f7;
+  background: #f8fafc;
+}
+
+.rb-review-filter-category-wrap {
+  flex: 0 0 auto;
+}
+
+.rb-review-filter-select {
+  width: auto;
+  min-width: 8.5rem;
+  max-width: 11rem;
+  font-size: 0.8125rem;
+  border-color: #e2e8f0;
+  background: #fff;
+}
+
+.rb-review-filter-clear {
+  flex-shrink: 0;
+  padding-inline: 0.55rem;
+  font-size: 0.75rem;
+}
+
+.rb-review-filter-count {
+  flex: 1 1 auto;
+  min-width: 5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rb-review-row.is-filtered-out {
+  display: none;
+}
+
+.rb-review-filter-empty td {
+  font-size: 0.875rem;
+}
+
+@media (max-width: 575.98px) {
+  .rb-review-filter-count {
+    flex-basis: 100%;
+    text-align: left;
+  }
+}
+
 .reviews-table-wrap {
   max-height: 420px;
   overflow-y: auto;
+}
+
+/* Analysis batch reviews — inset filter + table inside card */
+#reviewsResultsCard .rb-analysis-reviews-body {
+  padding-top: 0.75rem;
+}
+
+#reviewsResultsCard .rb-analysis-reviews-body:not(:has(.rb-review-filter-toolbar)) {
+  padding-top: 1rem;
+}
+
+#reviewsResultsCard .rb-review-filter-toolbar {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+#reviewsResultsCard .reviews-table-wrap {
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #fff;
 }
 
 .reviews-table thead th {
@@ -608,4 +774,155 @@
 .log-row-warning {
   border-left: 3px solid #f59e0b;
   background: #fffbeb;
+}
+
+/* History page — horizontal app strip + per-app dual scroll panels */
+.rb-history-layout {
+  margin-bottom: 0.5rem;
+}
+
+.rb-history-strip-card .rb-card-body {
+  padding-bottom: 0.75rem !important;
+}
+
+.rb-history-app-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+  padding: 0.15rem 0.15rem 0.35rem;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rb-history-app-strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.rb-history-app-strip::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.rb-history-app-strip::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.rb-history-app-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 0 0 auto;
+  min-width: 11.5rem;
+  max-width: 16rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.rb-history-app-chip:hover {
+  border-color: #93c5fd;
+  background: #f8fafc;
+}
+
+.rb-history-app-chip.is-active {
+  border-color: #2563eb;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15);
+}
+
+.rb-history-app-chip:focus {
+  outline: none;
+}
+
+.rb-history-app-chip:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.rb-history-chip-icon {
+  flex-shrink: 0;
+  border-radius: 8px;
+}
+
+.rb-history-chip-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.rb-history-chip-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rb-history-chip-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  line-height: 1.2;
+}
+
+.rb-history-app-detail {
+  min-height: 12rem;
+}
+
+.rb-history-app-panel .app-history-panel-card {
+  border: 1px solid #e2e8f0;
+}
+
+.rb-history-reviews-scroll {
+  max-height: min(380px, 45vh);
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.rb-history-tickets-scroll {
+  max-height: min(380px, 45vh);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.rb-history-reviews-scroll::-webkit-scrollbar,
+.rb-history-tickets-scroll::-webkit-scrollbar,
+.rb-history-logs-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rb-history-reviews-scroll::-webkit-scrollbar-thumb,
+.rb-history-tickets-scroll::-webkit-scrollbar-thumb,
+.rb-history-logs-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.rb-history-logs-scroll {
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 991.98px) {
+  .rb-history-app-chip {
+    min-width: 10rem;
+    max-width: 14rem;
+  }
+
+  .rb-history-reviews-scroll,
+  .rb-history-tickets-scroll {
+    max-height: min(320px, 40vh);
+  }
 }

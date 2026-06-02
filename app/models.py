@@ -1,4 +1,7 @@
 from datetime import datetime
+
+from sqlalchemy import UniqueConstraint
+
 from . import db
 
 
@@ -20,6 +23,8 @@ class Review(db.Model):
 
 
 class Ticket(db.Model):
+    __table_args__ = (UniqueConstraint("review_id", name="uq_ticket_review_id"),)
+
     id = db.Column(db.Integer, primary_key=True)
     review_id = db.Column(db.Integer, db.ForeignKey("review.id"), nullable=False)
     platform = db.Column(db.String(32), nullable=False)

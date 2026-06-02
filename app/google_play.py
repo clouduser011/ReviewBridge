@@ -2,9 +2,33 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from .app_catalog import normalize_app_entry, rank_apps, score_app_match
 from .datetime_utils import normalize_play_review_at
 
 log = logging.getLogger(__name__)
+
+_CACHE_TTL_SEC = 900
+_CACHE_MAX = 200
+_SEARCH_CACHE: Dict[str, tuple] = {}
+_PACKAGE_CACHE: Dict[str, tuple] = {}
+
+
+def _cache_get(store: Dict[str, tuple], key: str):
+    row = store.get(key)
+    if not row:
+        return None
+    expires_at, value = row
+    if time.time() > expires_at:
+        store.pop(key, None)
+        return None
+    return value
+
+
+def _cache_set(store: Dict[str, tuple], key: str, value, max_size: int):
+    if len(store) >= max_size:
+        oldest = next(iter(store))
+        store.pop(oldest, None)
+    store[key] = (time.time() + _CACHE_TTL_SEC, value)
 
 # Play scraping: smaller pages + backoff tend to return steadier continuation tokens.
 _PAGE_BATCH_LIMITED = 120
@@ -361,14 +385,64 @@ def fetch_google_play_reviews_all(
     return _finalize_fetch_rows(out, sort, multi_country=len(countries) > 1)
 
 
-def search_apps(query: str, limit: int = 12, lang: str = "en", country: str = "us") -> List[Dict[str, str]]:
-    """Search apps by name and return lightweight suggestions."""
+def _play_item_to_app(item: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    return normalize_app_entry(
+        {
+            "appId": item.get("appId"),
+            "title": item.get("title"),
+            "icon": item.get("icon"),
+            "developer": item.get("developer"),
+        }
+    )
+
+
+def lookup_app_by_package(
+    package_name: str, lang: str = "en", country: str = "us"
+) -> Optional[Dict[str, str]]:
+    pkg = (package_name or "").strip()
+    if not pkg:
+        return None
+
+    cache_key = f"{pkg}|{lang}|{country}"
+    cached = _cache_get(_PACKAGE_CACHE, cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        from google_play_scraper import app as play_app
+    except Exception:
+        return None
+
+    try:
+        detail = play_app(pkg, lang=lang, country=country)
+    except Exception:
+        _cache_set(_PACKAGE_CACHE, cache_key, None, _CACHE_MAX)
+        return None
+
+    norm = normalize_app_entry(
+        {
+            "appId": detail.get("appId") or pkg,
+            "title": detail.get("title"),
+            "icon": detail.get("icon"),
+            "developer": detail.get("developer"),
+        }
+    )
+    _cache_set(_PACKAGE_CACHE, cache_key, norm, _CACHE_MAX)
+    return norm
+
+
+def search_apps_play(query: str, limit: int = 12, lang: str = "en", country: str = "us") -> List[Dict[str, str]]:
+    """Search Google Play and return normalized app rows."""
     if not query.strip():
         return []
 
+    cache_key = f"{query.strip().lower()}|{limit}|{lang}|{country}"
+    cached = _cache_get(_SEARCH_CACHE, cache_key)
+    if cached is not None:
+        return cached
+
     _, _, _, search = _import_scraper()
     requested = max(1, int(limit))
-    query_l = query.strip().lower()
 
     countries = (
         ["us", "in", "gb", "pk", "de", "br"]
@@ -380,7 +454,7 @@ def search_apps(query: str, limit: int = 12, lang: str = "en", country: str = "u
     seen_pkg = set()
     for cc in countries:
         try:
-            pool = search(query, n_hits=max(15, requested * 2), lang=lang, country=cc)
+            pool = search(query, n_hits=max(20, requested * 3), lang=lang, country=cc)
         except Exception:
             continue
         for item in pool:
@@ -389,44 +463,49 @@ def search_apps(query: str, limit: int = 12, lang: str = "en", country: str = "u
                 continue
             seen_pkg.add(pid)
             merged.append(item)
-        if len(merged) >= requested * 2:
+        if len(merged) >= requested * 3:
             break
 
-    normalized = []
+    apps: List[Dict[str, str]] = []
     seen_packages = set()
     for item in merged:
-        package_name = item.get("appId") or ""
-        title = item.get("title") or package_name
-        icon = item.get("icon") or ""
-        developer = item.get("developer") or ""
-
-        if not package_name or package_name in seen_packages:
+        norm = _play_item_to_app(item)
+        if not norm:
             continue
-        seen_packages.add(package_name)
+        pkg = norm["package_name"]
+        if pkg in seen_packages:
+            continue
+        seen_packages.add(pkg)
+        apps.append(norm)
 
-        score = 0
-        t_l = title.lower()
-        d_l = developer.lower()
-        p_l = package_name.lower()
-        if t_l.startswith(query_l):
-            score += 5
-        if query_l in t_l:
-            score += 3
-        if query_l in d_l:
-            score += 2
-        if query_l in p_l:
-            score += 1
+    ranked = rank_apps(query, apps, requested)
+    _cache_set(_SEARCH_CACHE, cache_key, ranked, _CACHE_MAX)
+    return ranked
 
-        normalized.append(
-            {
-                "app_name": title,
-                "package_name": package_name,
-                "icon": icon,
-                "developer": developer,
-                "_score": score,
-            }
-        )
 
-    normalized.sort(key=lambda x: (x["_score"], x["app_name"].lower()), reverse=True)
-    suggestions = [{k: v for k, v in row.items() if k != "_score"} for row in normalized[:requested]]
-    return suggestions
+def merge_and_rank_suggestions(
+    local_results: List[Dict[str, str]],
+    play_results: List[Dict[str, str]],
+    query: str,
+    limit: int,
+) -> List[Dict[str, str]]:
+    requested = max(1, int(limit))
+    combined: List[Dict[str, str]] = []
+    seen = set()
+
+    for app in local_results + play_results:
+        norm = normalize_app_entry(app)
+        if not norm:
+            continue
+        pkg = norm["package_name"]
+        if pkg in seen:
+            continue
+        seen.add(pkg)
+        combined.append(norm)
+
+    return rank_apps(query, combined, requested)
+
+
+def search_apps(query: str, limit: int = 12, lang: str = "en", country: str = "us") -> List[Dict[str, str]]:
+    """Play-only search (used by merge path and tests)."""
+    return search_apps_play(query, limit=limit, lang=lang, country=country)

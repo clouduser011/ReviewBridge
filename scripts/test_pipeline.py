@@ -9,14 +9,16 @@ sys.path.insert(0, str(ROOT))
 
 from app import create_app, db
 from app.analyzer import review_storage_id, stable_review_id
+from app.app_catalog import catalog_status, load_catalog, rank_apps, score_app_match
 from app.google_play import (
     _finalize_fetch_rows,
     _merge_rows,
     _resolve_fetch_countries,
     _review_entry_from_play_row,
     _sort_rows_by_date,
+    merge_and_rank_suggestions,
 )
-from app.models import Review
+from app.models import Review, Ticket
 from app.datetime_utils import normalize_play_review_at
 from app.routes import (
     _batch_now,
@@ -34,6 +36,9 @@ CSV_PATH = ROOT / "data" / "sample_reviews.csv"
 
 def test_analysis_markup():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
+    filter_partial = (ROOT / "app" / "templates" / "_review_filter_toolbar.html").read_text(encoding="utf-8")
+    theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    html_bundle = html + filter_partial
     required = [
         "analysisPipelineCard",
         "analysis-empty-onboarding",
@@ -53,7 +58,10 @@ def test_analysis_markup():
         "quickPicksCard",
         "quick-picks-scroll",
         "dashboardMainContent",
-        "dashboardTopMetrics",
+        "rb-ticket-platform-strip",
+        "rb-ticket-platform-chip",
+        "rb-tickets-panel-body",
+        "tickets-list-wrap",
         "liveAnalysisPanels",
         "sentimentChart",
         "fetchCountryInput",
@@ -61,21 +69,38 @@ def test_analysis_markup():
         "fetchSortHidden",
         "statRefreshed",
         "rb-page-header",
+        "data-review-filter-root",
+        "rb-analysis-reviews-body",
+        "reviewsResultsCard",
+        "rb-review-filter-select",
+        "rb-review-filter-toolbar",
+        "_review_filter_toolbar.html",
+        "review-filter.js",
     ]
-    missing = [x for x in required if x not in html]
+    missing = [x for x in required if x not in html_bundle]
     assert not missing, f"Missing in analysis.html: {missing}"
     idx_import = html.find("rb-import-quick-row")
     idx_pipeline = html.find("analysisPipelineCard")
     idx_main = html.find('id="dashboardMainContent"')
+    idx_adv_toggle = html.find("toggleAdvancedOptionsSwitch")
+    idx_fetch_btn = html.find("btnFetchLimited")
     assert 0 <= idx_import < idx_pipeline < idx_main, (
         "Expected import row, then pipeline card, then dashboardMainContent"
     )
+    assert 0 <= idx_adv_toggle < idx_fetch_btn, (
+        "Expected Advanced options to appear before fetch buttons in analysis import form"
+    )
     assert "analysis-demo-showcase" not in html
+    assert "Tickets (batch)" not in html
+    assert "tickets_total" not in html
+    assert "dashboardTopMetrics" not in html
     assert "_rb_demo_insight.html" not in html
     assert "fetchStatusCard" not in html
     assert "pipelineLogStream" not in html
     assert 'value="us" selected' in html or "United States" in html
     assert 'max="5000"' not in html
+    assert ".rb-import-advanced" in theme_css
+    assert "margin-bottom: 0.75rem;" in theme_css
     print("OK analysis markup")
 
 
@@ -266,6 +291,349 @@ def test_history_page_no_dashboard_charts():
     print("OK history page without chart scripts")
 
 
+def test_history_scrollable_layout():
+    history_html = (ROOT / "app" / "templates" / "history.html").read_text(encoding="utf-8")
+    filter_partial = (ROOT / "app" / "templates" / "_review_filter_toolbar.html").read_text(encoding="utf-8")
+    history_bundle = history_html + filter_partial
+    history_js = (ROOT / "app" / "static" / "js" / "history.js").read_text(encoding="utf-8")
+    style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+    for marker in (
+        "rb-history-app-strip",
+        "rb-history-app-chip",
+        "rb-history-reviews-scroll",
+        "rb-history-tickets-scroll",
+        "rb-history-logs-scroll",
+        'role="tablist"',
+        "history.js",
+        "data-review-filter-root",
+        "rb-review-filter-toolbar",
+        "rb-review-filter-select",
+        "review-snippet",
+        "rb-review-row",
+        "review-filter.js",
+    ):
+        assert marker in history_bundle, f"missing {marker} in history.html"
+
+    assert "initHistoryAppTabs" in history_js or "activateHistoryApp" in history_js
+    assert "initHistoryReviewFilters" in history_js
+    assert ".rb-history-app-strip" in style_css
+    assert ".rb-history-reviews-scroll" in style_css
+
+    filter_js = (ROOT / "app" / "static" / "js" / "review-filter.js").read_text(encoding="utf-8")
+    assert "mountReviewTableFilter" in filter_js
+
+    app = create_app()
+    with app.app_context():
+        resp = app.test_client().get("/history")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "rb-history-logs-scroll" in body
+    assert "review-filter.js" in body
+    print("OK history scrollable layout")
+
+
+def test_storage_health_endpoint():
+    app = create_app()
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+        resp = app.test_client().get("/api/storage-health")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["total_reviews"] == 0
+    assert data["total_tickets"] == 0
+    assert "per_app" in data
+    print("OK storage health endpoint")
+
+
+def test_hash_then_play_single_review_single_ticket():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+
+        app_name = "Dedupe Test App"
+        batch1 = _batch_now()
+        play_id = "play-dedupe-99"
+
+        ok1, reason1, meta1 = _process_review(
+            app_name,
+            "alice",
+            2,
+            "App crashes on login",
+            batch_started_at=batch1,
+            play_review_id=None,
+        )
+        assert ok1 and reason1 == "processed"
+        assert meta1.get("platform")
+        db.session.commit()
+
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 1
+        row = Review.query.first()
+        assert row.review_id.startswith(f"{app_name.strip().lower()}:")
+
+        batch2 = _normalize_batch_dt(batch1 + timedelta(seconds=3))
+        ok2, reason2, meta2 = _process_review(
+            app_name,
+            "alice",
+            2,
+            "App crashes on login",
+            batch_started_at=batch2,
+            play_review_id=play_id,
+        )
+        assert ok2 and reason2 == "refreshed"
+        assert meta2.get("platform") is None
+        db.session.commit()
+
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 1
+        row = Review.query.first()
+        assert row.review_id == f"play:{play_id}"
+    print("OK hash then play dedupe")
+
+
+def test_skip_positive_tickets_when_enabled():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+
+        app_name = "Skip Positive App"
+        batch = _batch_now()
+        ok, reason, _ = _process_review(
+            app_name,
+            "fan",
+            5,
+            "Absolutely love this app, amazing experience every day!",
+            batch_started_at=batch,
+            skip_positive_tickets=True,
+        )
+        assert ok and reason == "processed"
+        db.session.commit()
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 0
+        assert Review.query.first().sentiment == "positive"
+    print("OK skip positive tickets when enabled")
+
+
+def test_skip_positive_tickets_default_off():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+
+        app_name = "Skip Positive Off App"
+        batch = _batch_now()
+        ok, reason, meta = _process_review(
+            app_name,
+            "fan",
+            5,
+            "Absolutely love this app, amazing experience every day!",
+            batch_started_at=batch,
+            skip_positive_tickets=False,
+        )
+        assert ok and reason == "processed"
+        assert meta.get("platform")
+        db.session.commit()
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 1
+    print("OK skip positive tickets default off")
+
+
+def test_review_results_filter_js():
+    filter_js = (ROOT / "app" / "static" / "js" / "review-filter.js").read_text(encoding="utf-8")
+    dashboard_js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    assert "mountReviewTableFilter" in filter_js
+    assert "is-filtered-out" in filter_js
+    assert "function initReviewResultsFilter" in dashboard_js
+    assert "mountReviewTableFilter" in dashboard_js
+    assert "initReviewResultsFilter();" in dashboard_js
+    init_suggestions_block = dashboard_js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
+    assert "form.requestSubmit();" not in init_suggestions_block
+    print("OK review results filter JS")
+
+
+def test_app_match_ranking_name_first():
+    whatsapp = {
+        "app_name": "WhatsApp Messenger",
+        "package_name": "com.whatsapp",
+        "icon": "",
+        "developer": "WhatsApp LLC",
+    }
+    variant = {
+        "app_name": "WhatsApp Business",
+        "package_name": "com.whatsapp.w4b",
+        "icon": "",
+        "developer": "WhatsApp LLC",
+    }
+    unrelated = {
+        "app_name": "Photo Editor Pro",
+        "package_name": "com.example.photo",
+        "icon": "",
+        "developer": "Other",
+    }
+    ranked = rank_apps("whatsapp", [unrelated, variant, whatsapp], 3)
+    assert ranked[0]["package_name"] == "com.whatsapp"
+    assert score_app_match("whatsapp", whatsapp) > score_app_match("whatsapp", unrelated)
+    print("OK app match ranking name first")
+
+
+def test_merge_and_rank_suggestions_local_first():
+    local = [
+        {
+            "app_name": "Instagram",
+            "package_name": "com.instagram.android",
+            "icon": "",
+            "developer": "Meta",
+        }
+    ]
+    play = [
+        {
+            "app_name": "Random App",
+            "package_name": "com.random.app",
+            "icon": "",
+            "developer": "X",
+        },
+        {
+            "app_name": "Instagram Lite",
+            "package_name": "com.instagram.lite",
+            "icon": "",
+            "developer": "Meta",
+        },
+    ]
+    merged = merge_and_rank_suggestions(local, play, "instagram", 5)
+    assert merged[0]["package_name"] == "com.instagram.android"
+    print("OK merge and rank suggestions local first")
+
+
+def test_app_catalog_status_endpoint():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    res = client.get("/api/app-catalog/status")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert "count" in data
+    assert "ready" in data
+    assert "path_exists" in data
+    status = catalog_status()
+    if status.get("path_exists") and status.get("count", 0) >= 2000:
+        assert data["count"] >= 2000
+    print(f"OK app catalog status endpoint (count={data.get('count')})")
+
+
+def test_app_catalog_module_loads():
+    apps = load_catalog()
+    assert isinstance(apps, list)
+    print(f"OK app catalog module loads ({len(apps)} apps)")
+
+
+def test_app_suggestions_typed_search():
+    status = catalog_status()
+    if not status.get("path_exists") or status.get("count", 0) < 100:
+        print("SKIP app suggestions typed search (catalog not built)")
+        return
+
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+
+    res = client.get("/api/app-suggestions?q=whatsapp&limit=10")
+    assert res.status_code == 200
+    apps = res.get_json()
+    assert isinstance(apps, list)
+    assert len(apps) > 0
+    top = apps[0]
+    name_l = (top.get("app_name") or "").lower()
+    pkg_l = (top.get("package_name") or "").lower()
+    assert "whatsapp" in name_l or "whatsapp" in pkg_l
+
+    res2 = client.get("/api/app-suggestions?q=instagram&limit=10")
+    assert res2.status_code == 200
+    apps2 = res2.get_json()
+    assert len(apps2) > 0
+    top2 = apps2[0]
+    assert "instagram" in (top2.get("app_name") or "").lower() or "instagram" in (
+        top2.get("package_name") or ""
+    ).lower()
+    print("OK app suggestions typed search")
+
+
+def test_search_js_simple_api_debounce():
+    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
+    assert "debounceTimer" in init_block
+    assert "/api/app-suggestions" in init_block
+    assert "renderDefaultSuggestions" in init_block
+    assert "form.requestSubmit();" not in init_block
+    assert "handleSearchInput" not in init_block
+    assert "loadAppCatalog" not in init_block
+    assert "app-suggestions-panel--floating" not in init_block
+    assert "showLoading" not in init_block
+    print("OK search JS simple API debounce")
+
+
+def test_skip_positive_tickets_markup():
+    html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    assert "skipPositiveTicketsSwitch" in html
+    assert "Skip tickets for positive reviews" in html
+    assert "appendSkipPositiveTickets" in js
+    assert "skip_positive_tickets" in js
+    print("OK skip positive tickets markup")
+
+
+def test_refresh_does_not_create_second_ticket():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+
+        app_name = "Ticket Once App"
+        batch1 = _batch_now()
+        play_id = "play-ticket-once-1"
+
+        _process_review(
+            app_name,
+            "bob",
+            1,
+            "Terrible experience",
+            batch_started_at=batch1,
+            play_review_id=play_id,
+        )
+        db.session.commit()
+        assert Ticket.query.count() == 1
+
+        batch2 = _normalize_batch_dt(batch1 + timedelta(seconds=2))
+        _process_review(
+            app_name,
+            "bob",
+            1,
+            "Terrible experience",
+            batch_started_at=batch2,
+            play_review_id=play_id,
+        )
+        db.session.commit()
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 1
+    print("OK refresh does not create second ticket")
+
+
 def test_parse_review_row_helper():
     row = {
         "author": " A ",
@@ -388,7 +756,7 @@ def test_analysis_empty_shows_guided_onboarding():
     assert "Sample data" not in html
     assert 'data-charts-enabled="true"' in html
     assert "sentimentChart" in html
-    assert "dashboardTopMetrics" in html
+    assert "dashboardTopMetrics" not in html
     assert "liveFetchForm" in html
     assert "dataImportCard" in html
     assert 'max="5000"' not in html
@@ -569,7 +937,7 @@ def test_csv_job_flow():
     batch_res = client.get(f"/analysis?since={since}")
     assert batch_res.status_code == 200
     batch_html = batch_res.get_data(as_text=True)
-    assert "dashboardTopMetrics" in batch_html
+    assert "rb-ticket-platform-strip" in batch_html
     pipeline_class = batch_html.split('id="analysisPipelineCard"')[1].split(">")[0]
     assert "d-none" not in pipeline_class
     with client.session_transaction() as sess:
@@ -604,7 +972,7 @@ def test_batch_with_snapshot_keeps_pipeline_visible():
     res = client.get(f"/analysis?since={since_iso}")
     assert res.status_code == 200
     html = res.get_data(as_text=True)
-    assert "dashboardTopMetrics" in html
+    assert "rb-ticket-platform-strip" in html
     pipeline_class = html.split('id="analysisPipelineCard"')[1].split(">")[0]
     assert "d-none" not in pipeline_class
     with client.session_transaction() as sess:
@@ -880,6 +1248,13 @@ if __name__ == "__main__":
     test_clean_clears_stale_snapshot()
     test_clear_dashboard_clears_pipeline_snapshot()
     test_analysis_markup()
+    test_review_results_filter_js()
+    test_app_match_ranking_name_first()
+    test_merge_and_rank_suggestions_local_first()
+    test_app_catalog_status_endpoint()
+    test_app_catalog_module_loads()
+    test_app_suggestions_typed_search()
+    test_search_js_simple_api_debounce()
     test_app_nav_has_home_link()
     test_sticky_nav_scroll_offset_css()
     test_footer_sticky_layout_css()
@@ -888,6 +1263,13 @@ if __name__ == "__main__":
     test_export_download_options()
     test_nav_scroll_shared_js()
     test_history_page_no_dashboard_charts()
+    test_history_scrollable_layout()
+    test_storage_health_endpoint()
+    test_hash_then_play_single_review_single_ticket()
+    test_skip_positive_tickets_when_enabled()
+    test_skip_positive_tickets_default_off()
+    test_skip_positive_tickets_markup()
+    test_refresh_does_not_create_second_ticket()
     test_parse_review_row_helper()
     test_parse_review_count_no_upper_cap()
     test_play_fetch_helpers()

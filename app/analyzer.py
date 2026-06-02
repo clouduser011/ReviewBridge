@@ -14,6 +14,15 @@ def stable_review_id(author: str, content: str, rating: int) -> str:
     return hashlib.md5(key.encode("utf-8")).hexdigest()
 
 
+def content_hash_storage_id(app_name: str, author: str, content: str, rating: int) -> str:
+    app_key = (app_name or "").strip().lower()
+    return f"{app_key}:{stable_review_id(author, content, rating)}"
+
+
+def play_storage_id(play_review_id: str) -> str:
+    return f"play:{str(play_review_id).strip()}"
+
+
 def review_storage_id(
     app_name: str,
     play_review_id: str | None,
@@ -22,9 +31,38 @@ def review_storage_id(
     rating: int,
 ) -> str:
     if play_review_id and str(play_review_id).strip():
-        return f"play:{str(play_review_id).strip()}"
-    app_key = (app_name or "").strip().lower()
-    return f"{app_key}:{stable_review_id(author, content, rating)}"
+        return play_storage_id(str(play_review_id).strip())
+    return content_hash_storage_id(app_name, author, content, rating)
+
+
+def find_existing_review(
+    app_name: str,
+    play_review_id: str | None,
+    author: str,
+    content: str,
+    rating: int,
+):
+    """Find a stored review by canonical id, Play reviewId, or content hash."""
+    from .models import Review
+
+    canonical_id = review_storage_id(app_name, play_review_id, author, content, rating)
+    existing = Review.query.filter_by(review_id=canonical_id).first()
+    if existing:
+        return existing
+
+    play_id = (play_review_id or "").strip()
+    if play_id:
+        existing = Review.query.filter_by(review_id=play_storage_id(play_id)).first()
+        if existing:
+            return existing
+
+    hash_id = content_hash_storage_id(app_name, author, content, rating)
+    if hash_id != canonical_id:
+        existing = Review.query.filter_by(review_id=hash_id).first()
+        if existing:
+            return existing
+
+    return None
 
 
 def analyze_sentiment(text: str) -> tuple[str, float]:

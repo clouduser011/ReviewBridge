@@ -14,6 +14,7 @@ AI-powered web application that fetches Google Play reviews, performs sentiment 
   - Zendesk for support/complaint tasks
 - Real API mode for Jira and Zendesk (credentials via `.env`)
 - Monitoring dashboard with charts, review list, ticket feed, and logs
+- **Instant app search**: local catalog (2500+ apps) with exact app-name match ranking; Play Store fallback when needed
 
 ## Tech Stack
 
@@ -28,6 +29,8 @@ AI-powered web application that fetches Google Play reviews, performs sentiment 
 - `run.py` - app entrypoint
 - `app/routes.py` - home, analysis workspace, CSV upload, Google Play fetch endpoints
 - `app/google_play.py` - live Google Play review fetching
+- `app/app_catalog.py` - local app catalog search and name-first ranking
+- `data/app_catalog.json` - built app catalog (generate via script below)
 - `app/ticketing.py` - Jira/Zendesk real + fallback ticket creation
 - `app/templates/home.html` - marketing landing page
 - `app/templates/analysis.html` - analysis workspace UI
@@ -71,8 +74,21 @@ If credentials are missing, the app automatically uses mock ticket IDs so demo s
 3. Or use **Upload CSV** for offline/demo mode
 4. Review analysis results, generated tickets, and processing logs on the analysis page
 
+## App search catalog (recommended once)
+
+Build the local catalog used for instant, exact-first app suggestions on the Analysis page:
+
+```powershell
+python scripts/build_app_catalog.py
+```
+
+This writes `data/app_catalog.json` (target: 2500+ unique apps). Requires network access to Google Play search.
+
+Check status: `GET /api/app-catalog/status`
+
 ## Notes
 
+- **Storage diagnostics**: `GET /api/storage-health` returns JSON comparing review and ticket counts (useful if tickets seem higher than reviews).
 - The analysis workspace (`/analysis`) is intentionally **clean** on each visit or refresh. After a fetch or upload you are redirected to `/analysis?since=<iso-timestamp>` to view that batch; use **History** for all stored data.
 - `/dashboard` redirects to `/analysis` for backward compatibility.
 - The app is production-style for FYP submission and demo-ready.

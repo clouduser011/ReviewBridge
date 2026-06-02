@@ -9,15 +9,31 @@ from flask import Blueprint, Response, current_app, flash, jsonify, redirect, re
 from sqlalchemy import and_, case, or_
 
 from . import db
-from .analyzer import analyze_sentiment, classify_category, review_storage_id
+from .analyzer import (
+    analyze_sentiment,
+    classify_category,
+    find_existing_review,
+    review_storage_id,
+)
+from .storage_health import storage_health_report
 from .datetime_utils import (
     coerce_review_datetime as _coerce_review_datetime,
     parse_csv_review_date as _parse_csv_review_date,
 )
+from .app_catalog import (
+    catalog_status,
+    has_strong_local_match,
+    is_package_query,
+    load_catalog,
+    lookup_local_by_package,
+    search_local_catalog,
+)
 from .google_play import (
     fetch_google_play_reviews,
     fetch_google_play_reviews_all,
-    search_apps,
+    lookup_app_by_package,
+    merge_and_rank_suggestions,
+    search_apps_play,
 )
 from .models import ProcessingLog, Review, Ticket
 from .ticketing import (
@@ -129,13 +145,107 @@ def _batch_reviews_query(since: datetime):
     )
 
 
-def _completion_message(new_count: int, refreshed: int, skipped: int) -> str:
+def _completion_message(
+    new_count: int,
+    refreshed: int,
+    skipped: int,
+    *,
+    tickets_created: int = 0,
+    tickets_skipped_positive: int = 0,
+) -> str:
     parts = [f"{new_count} new"]
     if refreshed:
         parts.append(f"{refreshed} refreshed")
     if skipped:
         parts.append(f"{skipped} skipped (invalid only)")
+    if tickets_created:
+        parts.append(f"{tickets_created} ticket(s) created (new reviews only)")
+    if tickets_skipped_positive:
+        parts.append(f"{tickets_skipped_positive} positive skipped (no ticket)")
     return "Analysis complete — " + ", ".join(parts)
+
+
+def _maybe_upgrade_review_id(existing: Review, preferred_id: str) -> None:
+    if existing.review_id == preferred_id:
+        return
+    clash = Review.query.filter(
+        Review.review_id == preferred_id,
+        Review.id != existing.id,
+    ).first()
+    if clash is None:
+        existing.review_id = preferred_id
+
+
+def _refresh_existing_review(
+    existing: Review,
+    *,
+    app_name: str,
+    author: str,
+    rating: int,
+    raw_text: str,
+    sentiment: str,
+    category: str,
+    confidence: float,
+    batch_started_at: datetime,
+    play_review_id: str | None,
+    reviewed_at: datetime | None,
+    play_rank: int | None,
+) -> None:
+    preferred_id = review_storage_id(app_name, play_review_id, author, raw_text, rating)
+    existing.app_name = app_name
+    existing.author = author
+    existing.rating = rating
+    existing.content = raw_text
+    existing.sentiment = sentiment
+    existing.category = category
+    existing.confidence = round(confidence, 2)
+    if reviewed_at is not None:
+        existing.reviewed_at = reviewed_at
+    if play_rank is not None:
+        existing.play_rank = play_rank
+    existing.last_batch_at = batch_started_at
+    _maybe_upgrade_review_id(existing, preferred_id)
+
+
+def _create_ticket_for_review(
+    review: Review,
+    category: str,
+    sentiment: str,
+    *,
+    skip_positive_tickets: bool = False,
+) -> str | None:
+    """Create at most one ticket per review. Returns platform name or None."""
+    if review.tickets:
+        return None
+    if skip_positive_tickets and sentiment == "positive":
+        return None
+
+    platform = choose_ticket_platform(category)
+    try:
+        ticket_payload = (
+            create_jira_ticket(review, review.id)
+            if platform == "Jira"
+            else create_zendesk_ticket(review, review.id)
+        )
+    except Exception as e:
+        log_message(f"Ticket creation failed for review {review.id}: {e}", "error")
+        ticket_payload = {
+            "platform": platform,
+            "external_ticket_id": "FAILED",
+            "title": f"Ticket failed for review {review.id}",
+            "status": "error",
+        }
+
+    db.session.add(
+        Ticket(
+            review_id=review.id,
+            platform=ticket_payload["platform"],
+            external_ticket_id=ticket_payload["external_ticket_id"],
+            title=ticket_payload["title"],
+            status=ticket_payload.get("status", "open"),
+        )
+    )
+    return platform
 
 
 def _parse_review_count(raw, default: int = 100) -> int:
@@ -146,6 +256,10 @@ def _parse_review_count(raw, default: int = 100) -> int:
     if n < 1:
         raise ValueError("Review count must be at least 1.")
     return n
+
+
+def _parse_skip_positive_tickets(raw) -> bool:
+    return str(raw or "").strip().lower() in ("1", "true", "on", "yes")
 
 
 def _set_job(job_id: str, **kwargs):
@@ -190,36 +304,40 @@ def _process_review(
     play_review_id: str | None = None,
     reviewed_at: datetime | None = None,
     play_rank: int | None = None,
+    skip_positive_tickets: bool = False,
 ) -> tuple[bool, str, dict]:
     batch_started_at = _normalize_batch_dt(batch_started_at)  # type: ignore[assignment]
     raw_text = (text or "").strip()
     if not raw_text:
         return False, "empty", {}
 
-    storage_id = review_storage_id(app_name, play_review_id, author, raw_text, rating)
-    existing = Review.query.filter_by(app_name=app_name, review_id=storage_id).first()
+    existing = find_existing_review(app_name, play_review_id, author, raw_text, rating)
 
     sentiment, confidence = analyze_sentiment(raw_text)
     category = classify_category(raw_text, rating, sentiment)
 
     if existing:
-        existing.author = author
-        existing.rating = rating
-        existing.content = raw_text
-        existing.sentiment = sentiment
-        existing.category = category
-        existing.confidence = round(confidence, 2)
-        if reviewed_at is not None:
-            existing.reviewed_at = reviewed_at
-        if play_rank is not None:
-            existing.play_rank = play_rank
-        existing.last_batch_at = batch_started_at
+        _refresh_existing_review(
+            existing,
+            app_name=app_name,
+            author=author,
+            rating=rating,
+            raw_text=raw_text,
+            sentiment=sentiment,
+            category=category,
+            confidence=confidence,
+            batch_started_at=batch_started_at,
+            play_review_id=play_review_id,
+            reviewed_at=reviewed_at,
+            play_rank=play_rank,
+        )
         return True, "refreshed", {
             "platform": None,
             "category": category,
             "sentiment": sentiment,
         }
 
+    storage_id = review_storage_id(app_name, play_review_id, author, raw_text, rating)
     review = Review(
         source="Google Play",
         app_name=app_name,
@@ -238,30 +356,11 @@ def _process_review(
     db.session.add(review)
     db.session.flush()
 
-    platform = choose_ticket_platform(category)
-    try:
-        ticket_payload = (
-            create_jira_ticket(review, review.id)
-            if platform == "Jira"
-            else create_zendesk_ticket(review, review.id)
-        )
-    except Exception as e:
-        log_message(f"Ticket creation failed for review {review.id}: {e}", "error")
-        ticket_payload = {
-            "platform": platform,
-            "external_ticket_id": "FAILED",
-            "title": f"Ticket failed for review {review.id}",
-            "status": "error",
-        }
-
-    db.session.add(
-        Ticket(
-            review_id=review.id,
-            platform=ticket_payload["platform"],
-            external_ticket_id=ticket_payload["external_ticket_id"],
-            title=ticket_payload["title"],
-            status=ticket_payload.get("status", "open"),
-        )
+    platform = _create_ticket_for_review(
+        review,
+        category,
+        sentiment,
+        skip_positive_tickets=skip_positive_tickets,
     )
     return True, "processed", {
         "platform": platform,
@@ -293,6 +392,8 @@ def _process_reviews_loop(
     rows: list,
     batch_started_at: datetime,
     app_icon: str = "",
+    *,
+    skip_positive_tickets: bool = False,
 ) -> None:
     total_rows = len(rows)
     processed = 0
@@ -301,6 +402,7 @@ def _process_reviews_loop(
     skipped = 0
     jira_tickets = 0
     zendesk_tickets = 0
+    tickets_skipped_positive = 0
 
     _set_job(
         job_id,
@@ -355,6 +457,7 @@ def _process_reviews_loop(
             play_review_id=play_review_id,
             reviewed_at=reviewed_at,
             play_rank=play_rank,
+            skip_positive_tickets=skip_positive_tickets,
         )
         if ok:
             processed += 1
@@ -365,6 +468,13 @@ def _process_reviews_loop(
             platform = meta.get("platform")
             sentiment = meta.get("sentiment", "")
             category = meta.get("category", "")
+            if (
+                reason == "processed"
+                and skip_positive_tickets
+                and sentiment == "positive"
+                and not platform
+            ):
+                tickets_skipped_positive += 1
             if platform == "Jira":
                 jira_tickets += 1
             elif platform == "Zendesk":
@@ -396,7 +506,13 @@ def _process_reviews_loop(
         status="completed",
         phase="finalize",
         progress=100,
-        message=_completion_message(new_count, refreshed, skipped),
+        message=_completion_message(
+            new_count,
+            refreshed,
+            skipped,
+            tickets_created=jira_tickets + zendesk_tickets,
+            tickets_skipped_positive=tickets_skipped_positive,
+        ),
         batch_started_at=batch_started_at.isoformat(),
         processed=processed,
         new=new_count,
@@ -706,6 +822,7 @@ def analysis():
             "complaints": category_counts.get("complaint", 0),
             "jira": ticket_counts.get("Jira", 0),
             "zendesk": ticket_counts.get("Zendesk", 0),
+            "tickets_total": len(all_batch_tickets),
         },
     )
 
@@ -716,6 +833,12 @@ def dashboard_redirect():
     if since:
         return redirect(url_for("main.analysis", since=since))
     return redirect(url_for("main.analysis"))
+
+
+@main_bp.route("/api/storage-health")
+def api_storage_health():
+    """JSON diagnostics: reviews vs tickets and duplicate indicators."""
+    return jsonify(storage_health_report())
 
 
 @main_bp.route("/history")
@@ -756,6 +879,7 @@ def history():
         app_history=app_history,
         logs=logs,
         has_history_export_data=(len(reviews) > 0),
+        popular_apps_by_name=POPULAR_APPS_BY_NAME,
     )
 
 
@@ -851,20 +975,48 @@ def export_history_xlsx():
     )
 
 
+@main_bp.route("/api/app-catalog/status")
+def app_catalog_status():
+    return jsonify(catalog_status())
+
+
+@main_bp.route("/api/app-catalog")
+def app_catalog():
+    return jsonify(load_catalog())
+
+
 @main_bp.route("/api/app-suggestions")
 def app_suggestions():
     query = (request.args.get("q") or "").strip()
     lang = (request.args.get("lang") or "").strip()
     country = (request.args.get("country") or "us").strip()
-    limit = int(request.args.get("limit") or 12)
+    limit = max(1, min(50, int(request.args.get("limit") or 12)))
 
     if len(query) < 1:
         return jsonify([])
 
     try:
-        apps = search_apps(query=query, limit=limit, lang=lang, country=country)
+        if is_package_query(query):
+            local = lookup_local_by_package(query)
+            if local:
+                return jsonify([local])
+            play_pkg = lookup_app_by_package(query, lang=lang, country=country)
+            if play_pkg:
+                return jsonify([play_pkg])
+            return jsonify([])
+
+        local = search_local_catalog(query, limit=limit)
+        need_play = (
+            len(local) == 0
+            or len(local) < min(3, limit)
+            or not has_strong_local_match(query, local)
+        )
+        play: list = []
+        if need_play:
+            play = search_apps_play(query=query, limit=limit, lang=lang, country=country)
+        apps = merge_and_rank_suggestions(local, play, query, limit)
     except Exception as e:
-        log_message(f"App suggestion search failed: {e}", "error")
+        current_app.logger.exception("App suggestion search failed: %s", e)
         return jsonify([])
 
     return jsonify(apps)
@@ -881,6 +1033,7 @@ def _run_fetch_job(
     sort: str,
     app_icon: str,
     fetch_all: bool,
+    skip_positive_tickets: bool = False,
 ):
     with app.app_context():
         try:
@@ -947,7 +1100,14 @@ def _run_fetch_job(
                     total_reviews=total_rows,
                     message=f"Downloaded {total_rows} reviews — starting analysis…",
                 )
-                _process_reviews_loop(job_id, app_name, rows, batch_started_at, app_icon)
+                _process_reviews_loop(
+                    job_id,
+                    app_name,
+                    rows,
+                    batch_started_at,
+                    app_icon,
+                    skip_positive_tickets=skip_positive_tickets,
+                )
             if (_get_job(job_id) or {}).get("status") == "completed":
                 job_done = _get_job(job_id) or {}
                 log_message(
@@ -968,7 +1128,14 @@ def _run_fetch_job(
             )
 
 
-def _run_csv_job(app, job_id: str, app_name: str, rows: list, app_icon: str = ""):
+def _run_csv_job(
+    app,
+    job_id: str,
+    app_name: str,
+    rows: list,
+    app_icon: str = "",
+    skip_positive_tickets: bool = False,
+):
     with app.app_context():
         try:
             _set_job(
@@ -993,7 +1160,14 @@ def _run_csv_job(app, job_id: str, app_name: str, rows: list, app_icon: str = ""
                 message=f"Parsed {total_rows} rows from CSV — starting analysis…",
             )
 
-            _process_reviews_loop(job_id, app_name, rows, batch_started_at, app_icon)
+            _process_reviews_loop(
+                job_id,
+                app_name,
+                rows,
+                batch_started_at,
+                app_icon,
+                skip_positive_tickets=skip_positive_tickets,
+            )
             if (_get_job(job_id) or {}).get("status") == "completed":
                 job_done = _get_job(job_id) or {}
                 log_message(
@@ -1042,6 +1216,8 @@ def start_csv_upload():
     if not rows:
         return jsonify({"ok": False, "error": "CSV file has no data rows."}), 400
 
+    skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
+
     job_id = str(uuid.uuid4())
     session["active_fetch_job_id"] = job_id
     session.pop("pipeline_snapshot", None)
@@ -1067,7 +1243,7 @@ def start_csv_upload():
     app = current_app._get_current_object()
     worker = threading.Thread(
         target=_run_csv_job,
-        args=(app, job_id, app_name, rows, app_icon),
+        args=(app, job_id, app_name, rows, app_icon, skip_positive_tickets),
         daemon=True,
     )
     worker.start()
@@ -1087,6 +1263,7 @@ def upload_reviews():
     content = file.read().decode("utf-8")
     csv_reader = csv.DictReader(io.StringIO(content))
 
+    skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
     batch_started_at = _batch_now()
     processed = 0
     skipped = 0
@@ -1102,6 +1279,7 @@ def upload_reviews():
             play_review_id=parsed["play_review_id"],
             reviewed_at=parsed["reviewed_at"],
             play_rank=parsed["play_rank"],
+            skip_positive_tickets=skip_positive_tickets,
         )
         if ok:
             processed += 1
@@ -1126,6 +1304,7 @@ def fetch_from_google_play():
     country = (request.form.get("country") or "us").strip()
     sort = (request.form.get("sort") or "newest").strip()
     fetch_all = request.form.get("fetch_all") in ("1", "true", "on", "yes")
+    skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
 
     if not package_name:
         flash("Package name is required. Example: com.whatsapp", "danger")
@@ -1173,6 +1352,7 @@ def fetch_from_google_play():
             play_review_id=parsed["play_review_id"],
             reviewed_at=parsed["reviewed_at"],
             play_rank=parsed["play_rank"],
+            skip_positive_tickets=skip_positive_tickets,
         )
         if ok:
             processed += 1
@@ -1201,6 +1381,7 @@ def start_fetch_from_google_play():
     sort = (request.form.get("sort") or "newest").strip()
     app_icon = (request.form.get("app_icon") or "").strip() or "https://cdn.simpleicons.org/googleplay/34A853"
     fetch_all = request.form.get("fetch_all") in ("1", "true", "on", "yes")
+    skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
 
     if not package_name:
         return jsonify({"ok": False, "error": "Package name is required."}), 400
@@ -1234,7 +1415,19 @@ def start_fetch_from_google_play():
     app = current_app._get_current_object()
     worker = threading.Thread(
         target=_run_fetch_job,
-        args=(app, job_id, package_name, app_name, count, lang, country, sort, app_icon, fetch_all),
+        args=(
+            app,
+            job_id,
+            package_name,
+            app_name,
+            count,
+            lang,
+            country,
+            sort,
+            app_icon,
+            fetch_all,
+            skip_positive_tickets,
+        ),
         daemon=True,
     )
     worker.start()

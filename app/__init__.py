@@ -46,6 +46,7 @@ def create_app():
 
         db.create_all()
         _ensure_review_columns()
+        _ensure_ticket_constraints()
 
     return app
 
@@ -70,3 +71,29 @@ def _ensure_review_columns():
     with db.engine.begin() as conn:
         for stmt in statements:
             conn.execute(text(stmt))
+
+
+def _ensure_ticket_constraints():
+    """One ticket per review: dedupe existing rows and add unique index on SQLite."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    if "ticket" not in inspector.get_table_names():
+        return
+
+    with db.engine.begin() as conn:
+        conn.execute(
+            text(
+                "DELETE FROM ticket WHERE id NOT IN ("
+                "SELECT MIN(id) FROM ticket GROUP BY review_id)"
+            )
+        )
+        try:
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_ticket_review_id "
+                    "ON ticket (review_id)"
+                )
+            )
+        except Exception:
+            pass
