@@ -985,19 +985,40 @@ def app_catalog():
     return jsonify(load_catalog())
 
 
+def _needs_play_fallback(query: str, local: list, limit: int) -> bool:
+    return (
+        len(local) == 0
+        or len(local) < min(3, limit)
+        or not has_strong_local_match(query, local)
+    )
+
+
+def _truthy_param(name: str) -> bool:
+    return (request.args.get(name) or "").strip().lower() in ("1", "true", "yes")
+
+
 @main_bp.route("/api/app-suggestions")
 def app_suggestions():
     query = (request.args.get("q") or "").strip()
     lang = (request.args.get("lang") or "").strip()
     country = (request.args.get("country") or "us").strip()
     limit = max(1, min(50, int(request.args.get("limit") or 12)))
+    local_only = _truthy_param("local_only")
+    play_only = _truthy_param("play_only")
 
     if len(query) < 1:
+        if local_only:
+            return jsonify({"apps": [], "needs_play": False})
         return jsonify([])
 
     try:
         if is_package_query(query):
+            if play_only:
+                play_pkg = lookup_app_by_package(query, lang=lang, country=country)
+                return jsonify([play_pkg] if play_pkg else [])
             local = lookup_local_by_package(query)
+            if local_only:
+                return jsonify({"apps": [local] if local else [], "needs_play": local is None})
             if local:
                 return jsonify([local])
             play_pkg = lookup_app_by_package(query, lang=lang, country=country)
@@ -1005,18 +1026,24 @@ def app_suggestions():
                 return jsonify([play_pkg])
             return jsonify([])
 
+        if play_only:
+            play = search_apps_play(query=query, limit=limit, lang=lang, country=country)
+            return jsonify(play)
+
         local = search_local_catalog(query, limit=limit)
-        need_play = (
-            len(local) == 0
-            or len(local) < min(3, limit)
-            or not has_strong_local_match(query, local)
-        )
+        need_play = _needs_play_fallback(query, local, limit)
+
+        if local_only:
+            return jsonify({"apps": local, "needs_play": need_play})
+
         play: list = []
         if need_play:
             play = search_apps_play(query=query, limit=limit, lang=lang, country=country)
         apps = merge_and_rank_suggestions(local, play, query, limit)
     except Exception as e:
         current_app.logger.exception("App suggestion search failed: %s", e)
+        if local_only:
+            return jsonify({"apps": [], "needs_play": False})
         return jsonify([])
 
     return jsonify(apps)

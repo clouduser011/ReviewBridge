@@ -132,6 +132,25 @@
   word-break: break-word;
 }
 
+.suggestion-searching {
+  color: #64748b;
+  font-size: 0.8125rem;
+}
+
+.suggestion-search-spinner {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.suggestion-searching-text {
+  line-height: 1.25;
+}
+
+.suggestion-empty {
+  line-height: 1.35;
+}
+
 .current-app-badge {
   background: #1d4ed8;
   color: #fff;

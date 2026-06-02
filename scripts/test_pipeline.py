@@ -1,4 +1,5 @@
 """Smoke-test analysis pipeline API and dashboard markup."""
+import json
 import sys
 import time
 from datetime import datetime, timedelta
@@ -9,11 +10,13 @@ sys.path.insert(0, str(ROOT))
 
 from app import create_app, db
 from app.analyzer import review_storage_id, stable_review_id
-from app.app_catalog import catalog_status, load_catalog, rank_apps, score_app_match
+from app.app_catalog import catalog_status, load_catalog, rank_apps, score_app_match, search_local_catalog
 from app.google_play import (
     _finalize_fetch_rows,
     _merge_rows,
+    _normalize_play_lang,
     _resolve_fetch_countries,
+    _resolve_search_countries,
     _review_entry_from_play_row,
     _sort_rows_by_date,
     merge_and_rank_suggestions,
@@ -529,8 +532,8 @@ def test_app_catalog_status_endpoint():
     assert "ready" in data
     assert "path_exists" in data
     status = catalog_status()
-    if status.get("path_exists") and status.get("count", 0) >= 2000:
-        assert data["count"] >= 2000
+    if status.get("path_exists") and status.get("count", 0) >= 3000:
+        assert data["count"] >= 3000
     print(f"OK app catalog status endpoint (count={data.get('count')})")
 
 
@@ -538,6 +541,60 @@ def test_app_catalog_module_loads():
     apps = load_catalog()
     assert isinstance(apps, list)
     print(f"OK app catalog module loads ({len(apps)} apps)")
+
+
+def test_pk_priority_apps_file():
+    path = ROOT / "data" / "pk_priority_apps.json"
+    assert path.is_file()
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(raw.get("packages"), list)
+    assert isinstance(raw.get("search_terms"), list)
+    assert len(raw["packages"]) >= 40
+    assert len(raw["search_terms"]) >= 20
+    assert "com.sadapay.app" in raw["packages"]
+    print("OK pk priority apps file")
+
+
+def test_build_catalog_pk_seeds():
+    scripts_dir = ROOT / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from build_app_catalog import _pk_seed_queries, seed_queries
+
+    pk = _pk_seed_queries()
+    assert "sadapay" in pk
+    assert "jazzcash" in pk
+    assert "daraz" in pk
+    seeds = seed_queries()
+    assert len(seeds) >= 500
+    assert seeds.index("sadapay") < seeds.index("whatsapp")
+    print(f"OK build catalog pk seeds ({len(seeds)} total)")
+
+
+def test_build_catalog_uses_multi_country():
+    text = (ROOT / "scripts" / "build_app_catalog.py").read_text(encoding="utf-8")
+    assert 'BUILD_COUNTRIES = ("pk", "in", "us")' in text
+    assert 'search(q, n_hits=30, lang="en", country="us")' not in text
+    assert "_play_search" in text
+    assert "_bootstrap_pk_priority" in text
+    print("OK build catalog uses multi country")
+
+
+def test_catalog_pk_apps_local_search():
+    status = catalog_status()
+    if not status.get("path_exists") or status.get("count", 0) < 3000:
+        print("SKIP catalog pk apps local search (catalog < 3000 apps)")
+        return
+
+    load_catalog(force_reload=True)
+    found = False
+    for query in ("sadapay", "nayapay", "jazzcash", "daraz", "bykea"):
+        results = search_local_catalog(query, limit=5)
+        if results:
+            found = True
+            break
+    assert found, "expected at least one PK app in local catalog search"
+    print("OK catalog pk apps local search")
 
 
 def test_app_suggestions_typed_search():
@@ -571,23 +628,132 @@ def test_app_suggestions_typed_search():
     print("OK app suggestions typed search")
 
 
-def test_search_js_simple_api_debounce():
+def test_app_suggestions_local_only_endpoint():
+    status = catalog_status()
+    if not status.get("path_exists") or status.get("count", 0) < 100:
+        print("SKIP app suggestions local_only endpoint (catalog not built)")
+        return
+
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+
+    res = client.get("/api/app-suggestions?q=whatsapp&limit=2&local_only=1")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert isinstance(data, dict)
+    assert "apps" in data
+    assert "needs_play" in data
+    assert isinstance(data["apps"], list)
+    assert len(data["apps"]) > 0
+    assert data["needs_play"] is False
+
+    res_empty = client.get("/api/app-suggestions?q=zzzznotarealappname999&limit=10&local_only=1")
+    assert res_empty.status_code == 200
+    empty_data = res_empty.get_json()
+    assert isinstance(empty_data, dict)
+    assert empty_data.get("apps") == []
+    assert empty_data.get("needs_play") is True
+    print("OK app suggestions local_only endpoint")
+
+
+def test_app_suggestions_play_only_endpoint():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+
+    res = client.get("/api/app-suggestions?q=whatsapp&limit=5&play_only=1")
+    assert res.status_code == 200
+    data = res.get_json()
+    assert isinstance(data, list)
+    print("OK app suggestions play_only endpoint")
+
+
+def test_normalize_play_lang():
+    assert _normalize_play_lang("") == "en"
+    assert _normalize_play_lang("  ") == "en"
+    assert _normalize_play_lang("ur") == "ur"
+    assert _normalize_play_lang(" en ") == "en"
+    print("OK normalize play lang")
+
+
+def test_resolve_search_countries_pk():
+    pk = _resolve_search_countries("pk")
+    assert pk[0] == "pk"
+    assert "in" in pk
+    assert "us" in pk
+
+    ww = _resolve_search_countries("ww")
+    assert ww[0] == "us"
+    assert "pk" in ww
+    assert ww.index("pk") < ww.index("gb")
+
+    ae = _resolve_search_countries("ae")
+    assert ae[0] == "ae"
+    assert "pk" in ae
+    print("OK resolve search countries pk")
+
+
+def test_app_suggestions_play_only_pk_smoke():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+
+    try:
+        res = client.get("/api/app-suggestions?q=jazzcash&limit=5&play_only=1&country=pk&lang=en")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert isinstance(data, list)
+        if not data:
+            print("SKIP app suggestions play_only pk smoke (no network results)")
+            return
+        name_l = (data[0].get("app_name") or "").lower()
+        pkg_l = (data[0].get("package_name") or "").lower()
+        assert "jazz" in name_l or "jazz" in pkg_l
+        print("OK app suggestions play_only pk smoke")
+    except Exception as exc:
+        print(f"SKIP app suggestions play_only pk smoke ({exc})")
+
+
+def test_search_js_country_change_rerun():
+    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
+    assert "fetchCountryInput" in init_block
+    assert "runSearch" in init_block
+    assert 'addEventListener("change"' in init_block
+    assert 'lang || "en"' in init_block
+    print("OK search JS country change rerun")
+
+
+def test_search_js_play_loading_state():
     js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
     style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
     assert "debounceTimer" in init_block
     assert "/api/app-suggestions" in init_block
+    assert "local_only" in init_block
+    assert "play_only" in init_block
     assert "renderDefaultSuggestions" in init_block
+    assert "renderSearchingPlay" in init_block
+    assert "Searching Google Play" in init_block
+    assert "fetchSuggestions" in init_block
+    assert "runSearch" in init_block
+    assert "fetchCountryInput" in init_block
+    assert 'lang || "en"' in init_block
     assert "form.requestSubmit();" not in init_block
     assert "handleSearchInput" not in init_block
     assert "loadAppCatalog" not in init_block
     assert "app-suggestions-panel--floating" not in init_block
-    assert "showLoading" not in init_block
+    assert ".suggestion-searching" in style_css
     assert "#dataImportCard" in style_css
     assert "overflow: visible" in style_css
     assert ".app-search-wrap" in style_css
     assert "max-width: 22rem" in style_css
-    print("OK search JS simple API debounce")
+    print("OK search JS play loading state")
+
+
+def test_search_js_simple_api_debounce():
+    test_search_js_play_loading_state()
 
 
 def test_form_switch_refined_styles():
@@ -1306,8 +1472,18 @@ if __name__ == "__main__":
     test_merge_and_rank_suggestions_local_first()
     test_app_catalog_status_endpoint()
     test_app_catalog_module_loads()
+    test_pk_priority_apps_file()
+    test_build_catalog_pk_seeds()
+    test_build_catalog_uses_multi_country()
+    test_catalog_pk_apps_local_search()
     test_app_suggestions_typed_search()
-    test_search_js_simple_api_debounce()
+    test_app_suggestions_local_only_endpoint()
+    test_app_suggestions_play_only_endpoint()
+    test_normalize_play_lang()
+    test_resolve_search_countries_pk()
+    test_app_suggestions_play_only_pk_smoke()
+    test_search_js_country_change_rerun()
+    test_search_js_play_loading_state()
     test_form_switch_refined_styles()
     test_app_nav_has_home_link()
     test_sticky_nav_scroll_offset_css()

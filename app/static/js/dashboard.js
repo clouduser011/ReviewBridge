@@ -843,7 +843,11 @@ function initAppSuggestions() {
 
   const renderSuggestions = (apps, opts = {}) => {
     if (!apps.length) {
-      hideSuggestions();
+      if (opts.emptyMessage) {
+        renderEmptyResults(opts.emptyMessage);
+      } else {
+        hideSuggestions();
+      }
       return;
     }
 
@@ -884,6 +888,99 @@ function initAppSuggestions() {
     });
   };
 
+  const renderSearchingPlay = () => {
+    suggestionsBox.innerHTML = `
+      <div class="suggestion-list-header text-uppercase small text-muted px-3 py-2 border-bottom">App search</div>
+      <div class="suggestion-searching d-flex align-items-center gap-2 px-3 py-3" role="status" aria-live="polite">
+        <span class="spinner-border spinner-border-sm text-primary suggestion-search-spinner" aria-hidden="true"></span>
+        <span class="suggestion-searching-text">Searching Google Play…</span>
+      </div>`;
+    suggestionsBox.classList.remove("d-none");
+  };
+
+  const renderEmptyResults = (message = "No apps found") => {
+    suggestionsBox.innerHTML = `
+      <div class="suggestion-list-header text-uppercase small text-muted px-3 py-2 border-bottom">App search</div>
+      <div class="suggestion-empty px-3 py-3 text-muted small" role="status">${message}</div>`;
+    suggestionsBox.classList.remove("d-none");
+  };
+
+  const buildSuggestionsUrl = (query, { lang, country, extra = {} }) => {
+    const params = new URLSearchParams({
+      q: query,
+      limit: "20",
+      lang: lang || "en",
+      country,
+    });
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value != null && value !== "") params.set(key, String(value));
+    });
+    return `/api/app-suggestions?${params.toString()}`;
+  };
+
+  const getSearchLocale = () => {
+    const langEl = document.getElementById("fetchLangInput");
+    const countryEl = document.getElementById("fetchCountryInput");
+    const langHidden = document.getElementById("fetchLangHidden");
+    const lang = langEl ? langEl.value.trim() : (langHidden ? langHidden.value.trim() : "");
+    const country = countryEl ? countryEl.value.trim() : "ww";
+    return { lang: lang || "en", country };
+  };
+
+  const runSearch = (query) => {
+    const activeQuery = (query || "").trim();
+    const { lang, country } = getSearchLocale();
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    if (activeQuery.length < 1) {
+      renderDefaultSuggestions();
+      return;
+    }
+
+    debounceTimer = setTimeout(async () => {
+      try {
+        if (inFlight) inFlight.abort();
+        inFlight = new AbortController();
+        const result = await fetchSuggestions(activeQuery, lang, country, inFlight.signal);
+        if (input.value.trim() !== activeQuery) return;
+        if (result.apps.length > 0) {
+          renderSuggestions(result.apps);
+        } else if (result.phase === "play") {
+          renderEmptyResults();
+        } else {
+          hideSuggestions();
+        }
+      } catch (_err) {
+        if (_err && _err.name === "AbortError") return;
+        if (input.value.trim() !== activeQuery) return;
+        hideSuggestions();
+      }
+    }, 80);
+  };
+
+  const fetchSuggestions = async (query, lang, country, signal) => {
+    const localUrl = buildSuggestionsUrl(query, { lang, country, extra: { local_only: "1" } });
+    const localRes = await fetch(localUrl, { signal, credentials: "same-origin" });
+    const localData = await localRes.json();
+    const localApps = Array.isArray(localData?.apps) ? localData.apps : [];
+    const needsPlay = Boolean(localData?.needs_play);
+
+    if (localApps.length > 0) {
+      return { apps: localApps, phase: "local" };
+    }
+
+    if (!needsPlay) {
+      return { apps: [], phase: "none" };
+    }
+
+    renderSearchingPlay();
+
+    const playUrl = buildSuggestionsUrl(query, { lang, country, extra: { play_only: "1" } });
+    const playRes = await fetch(playUrl, { signal, credentials: "same-origin" });
+    const playApps = await playRes.json();
+    return { apps: Array.isArray(playApps) ? playApps : [], phase: "play" };
+  };
+
   const renderDefaultSuggestions = () => {
     if (!defaults.length) {
       hideSuggestions();
@@ -894,33 +991,18 @@ function initAppSuggestions() {
   };
 
   input.addEventListener("input", () => {
-    const query = input.value.trim();
-    const langEl = document.getElementById("fetchLangInput");
-    const countryEl = document.getElementById("fetchCountryInput");
-    const langHidden = document.getElementById("fetchLangHidden");
-    const lang = langEl ? langEl.value.trim() : (langHidden ? langHidden.value.trim() : "");
-    const country = countryEl ? countryEl.value.trim() : "ww";
-
-    if (debounceTimer) clearTimeout(debounceTimer);
-    if (query.length < 1) {
-      renderDefaultSuggestions();
-      return;
-    }
-
-    debounceTimer = setTimeout(async () => {
-      try {
-        if (inFlight) inFlight.abort();
-        inFlight = new AbortController();
-        const url = `/api/app-suggestions?q=${encodeURIComponent(query)}&limit=20&lang=${encodeURIComponent(lang)}&country=${encodeURIComponent(country)}`;
-        const response = await fetch(url, { signal: inFlight.signal, credentials: "same-origin" });
-        const apps = await response.json();
-        renderSuggestions(Array.isArray(apps) ? apps : []);
-      } catch (_err) {
-        if (_err && _err.name === "AbortError") return;
-        hideSuggestions();
-      }
-    }, 80);
+    runSearch(input.value.trim());
   });
+
+  const countryEl = document.getElementById("fetchCountryInput");
+  if (countryEl) {
+    countryEl.addEventListener("change", () => {
+      const query = input.value.trim();
+      if (query.length > 0) {
+        runSearch(query);
+      }
+    });
+  }
 
   document.addEventListener("click", (event) => {
     if (searchWrap && !searchWrap.contains(event.target)) {

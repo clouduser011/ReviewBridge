@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 _CATALOG_PATH = Path(__file__).resolve().parent.parent / "data" / "app_catalog.json"
 _catalog_cache: Optional[List[Dict[str, str]]] = None
 _catalog_mtime: Optional[float] = None
+_catalog_meta: Dict[str, Any] = {}
 
 _PACKAGE_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$", re.I)
 _WORD_RE = re.compile(r"[a-z0-9]+", re.I)
@@ -106,11 +107,12 @@ def rank_apps(query: str, apps: List[Dict[str, str]], limit: int) -> List[Dict[s
 
 
 def load_catalog(force_reload: bool = False) -> List[Dict[str, str]]:
-    global _catalog_cache, _catalog_mtime
+    global _catalog_cache, _catalog_mtime, _catalog_meta
     path = _CATALOG_PATH
     if not path.is_file():
         _catalog_cache = []
         _catalog_mtime = None
+        _catalog_meta = {}
         return []
 
     mtime = path.stat().st_mtime
@@ -120,8 +122,14 @@ def load_catalog(force_reload: bool = False) -> List[Dict[str, str]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(raw, dict):
         items = raw.get("apps") or raw.get("items") or []
+        _catalog_meta = {
+            "target_count": raw.get("target_count"),
+            "generated_at": raw.get("generated_at"),
+            "build": raw.get("build"),
+        }
     else:
         items = raw
+        _catalog_meta = {}
 
     out: List[Dict[str, str]] = []
     seen = set()
@@ -145,12 +153,18 @@ def catalog_status() -> Dict[str, Any]:
     exists = path.is_file()
     count = len(load_catalog()) if exists else 0
     ready = exists and count >= 500
-    return {
+    status: Dict[str, Any] = {
         "path_exists": exists,
         "count": count,
         "ready": ready,
         "path": str(path),
     }
+    target_count = _catalog_meta.get("target_count")
+    if target_count is not None:
+        status["target_count"] = target_count
+    if _catalog_meta.get("generated_at"):
+        status["generated_at"] = _catalog_meta["generated_at"]
+    return status
 
 
 def search_local_catalog(query: str, limit: int = 12) -> List[Dict[str, str]]:

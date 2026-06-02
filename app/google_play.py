@@ -51,6 +51,35 @@ def _import_scraper():
     return Sort, reviews, reviews_all, search
 
 
+def _normalize_play_lang(lang: str) -> str:
+    value = (lang or "").strip()
+    return value if value else "en"
+
+
+def _resolve_search_countries(country: str) -> List[str]:
+    c = (country or "").lower().strip()
+    if c in ("", "ww", "global", "all", "world"):
+        ordered = ["us", "pk", "in", "gb", "de", "br"]
+    elif c == "pk":
+        ordered = ["pk", "in", "us"]
+    elif c == "in":
+        ordered = ["in", "pk", "us"]
+    elif c == "ae":
+        ordered = ["ae", "pk", "in", "us"]
+    else:
+        ordered = [c, "us"]
+
+    seen = set()
+    out: List[str] = []
+    for cc in ordered:
+        key = cc.lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
 def _resolve_fetch_countries(country: str, *, limited: bool = False) -> List[str]:
     c = (country or "").lower()
     if c in ("", "ww", "global", "all", "world"):
@@ -403,7 +432,8 @@ def lookup_app_by_package(
     if not pkg:
         return None
 
-    cache_key = f"{pkg}|{lang}|{country}"
+    play_lang = _normalize_play_lang(lang)
+    cache_key = f"{pkg}|{play_lang}|{country}"
     cached = _cache_get(_PACKAGE_CACHE, cache_key)
     if cached is not None:
         return cached
@@ -413,22 +443,27 @@ def lookup_app_by_package(
     except Exception:
         return None
 
-    try:
-        detail = play_app(pkg, lang=lang, country=country)
-    except Exception:
-        _cache_set(_PACKAGE_CACHE, cache_key, None, _CACHE_MAX)
-        return None
+    for cc in _resolve_search_countries(country):
+        try:
+            detail = play_app(pkg, lang=play_lang, country=cc)
+        except Exception as exc:
+            log.warning("google_play app() failed for %s (%s): %s", pkg, cc, exc)
+            continue
 
-    norm = normalize_app_entry(
-        {
-            "appId": detail.get("appId") or pkg,
-            "title": detail.get("title"),
-            "icon": detail.get("icon"),
-            "developer": detail.get("developer"),
-        }
-    )
-    _cache_set(_PACKAGE_CACHE, cache_key, norm, _CACHE_MAX)
-    return norm
+        norm = normalize_app_entry(
+            {
+                "appId": detail.get("appId") or pkg,
+                "title": detail.get("title"),
+                "icon": detail.get("icon"),
+                "developer": detail.get("developer"),
+            }
+        )
+        if norm:
+            _cache_set(_PACKAGE_CACHE, cache_key, norm, _CACHE_MAX)
+            return norm
+
+    _cache_set(_PACKAGE_CACHE, cache_key, None, _CACHE_MAX)
+    return None
 
 
 def search_apps_play(query: str, limit: int = 12, lang: str = "en", country: str = "us") -> List[Dict[str, str]]:
@@ -436,26 +471,23 @@ def search_apps_play(query: str, limit: int = 12, lang: str = "en", country: str
     if not query.strip():
         return []
 
-    cache_key = f"{query.strip().lower()}|{limit}|{lang}|{country}"
+    play_lang = _normalize_play_lang(lang)
+    cache_key = f"{query.strip().lower()}|{limit}|{play_lang}|{country}"
     cached = _cache_get(_SEARCH_CACHE, cache_key)
     if cached is not None:
         return cached
 
     _, _, _, search = _import_scraper()
     requested = max(1, int(limit))
-
-    countries = (
-        ["us", "in", "gb", "pk", "de", "br"]
-        if (country or "").lower() in ("", "ww", "global", "all", "world")
-        else [country]
-    )
+    countries = _resolve_search_countries(country)
 
     merged: List[Dict[str, Any]] = []
     seen_pkg = set()
     for cc in countries:
         try:
-            pool = search(query, n_hits=max(20, requested * 3), lang=lang, country=cc)
-        except Exception:
+            pool = search(query, n_hits=max(20, requested * 3), lang=play_lang, country=cc)
+        except Exception as exc:
+            log.warning("google_play search() failed for %r (%s): %s", query, cc, exc)
             continue
         for item in pool:
             pid = item.get("appId") or ""

@@ -14,7 +14,7 @@ AI-powered web application that fetches Google Play reviews, performs sentiment 
   - Zendesk for support/complaint tasks
 - Real API mode for Jira and Zendesk (credentials via `.env`)
 - Monitoring dashboard with charts, review list, ticket feed, and logs
-- **Instant app search**: local catalog (2500+ apps) with exact app-name match ranking; Play Store fallback when needed
+- **Instant app search**: local catalog (6200+ apps, Pakistan-focused) with exact app-name match ranking; Play Store fallback when needed
 
 ## Tech Stack
 
@@ -76,13 +76,19 @@ If credentials are missing, the app automatically uses mock ticket IDs so demo s
 
 ## App search catalog (recommended once)
 
-Build the local catalog used for instant, exact-first app suggestions on the Analysis page:
+Build the local catalog used for instant, exact-first app suggestions on the Analysis page. The builder is **Pakistan-focused**: it merges your existing catalog, bootstraps must-have PK apps from [`data/pk_priority_apps.json`](data/pk_priority_apps.json), then searches Google Play on **pk → in → us** storefronts.
 
 ```powershell
-python scripts/build_app_catalog.py
+python scripts/build_app_catalog.py --resume --target 6200
 ```
 
-This writes `data/app_catalog.json` (target: 2500+ unique apps). Requires network access to Google Play search.
+Monitor progress:
+
+```powershell
+python scripts/build_app_catalog.py --status
+```
+
+This writes `data/app_catalog.json` (target: **6200+** unique apps). Requires network access to Google Play. If interrupted, re-run the same `--resume` command. Expected duration: about **30–90 minutes** for a full PK-focused expansion.
 
 Check status: `GET /api/app-catalog/status`
 
