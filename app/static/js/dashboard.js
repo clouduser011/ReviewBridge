@@ -293,6 +293,25 @@ function updateSelectedAppChip() {
   chip.classList.remove("d-none");
 }
 
+function fillLiveFetchAppFromPick({ packageName, appName, icon }) {
+  const packageInput = document.getElementById("packageNameInput");
+  const appNameInput = document.getElementById("appNameInput");
+  const appSearchInput = document.getElementById("appSearchInput");
+  const appIconInput = document.getElementById("appIconInput");
+  const pkgManual = document.getElementById("packageNameManual");
+  const fetchAllFlag = document.getElementById("fetchAllFlag");
+  if (!packageInput || !appNameInput) return;
+  const pkg = packageName || "";
+  const name = appName || "";
+  packageInput.value = pkg;
+  appNameInput.value = name;
+  if (appSearchInput) appSearchInput.value = name;
+  if (appIconInput) appIconInput.value = icon || "";
+  if (pkgManual) pkgManual.value = pkg;
+  if (fetchAllFlag) fetchAllFlag.value = "";
+  updateSelectedAppChip();
+}
+
 function syncQuickPicksRowHeights() {
   const importCard = document.getElementById("dataImportCard");
   const quickCard = document.getElementById("quickPicksCard");
@@ -400,24 +419,22 @@ function initCsvFileInput() {
 }
 
 function initPopularAppButtons() {
-  const form = document.getElementById("liveFetchForm");
   const packageInput = document.getElementById("packageNameInput");
   const appNameInput = document.getElementById("appNameInput");
-  const appIconInput = document.getElementById("appIconInput");
-  const fetchAllFlag = document.getElementById("fetchAllFlag");
-  const quickPickFetchAllToggle = document.getElementById("quickPickFetchAllToggle");
-
-  if (!form || !packageInput || !appNameInput) return;
+  if (!packageInput || !appNameInput) return;
 
   document.querySelectorAll(".popular-app-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       if (isAnalysisJobRunning()) return;
-      packageInput.value = btn.dataset.package || "";
-      appNameInput.value = btn.dataset.appName || "";
-      if (appIconInput) appIconInput.value = btn.querySelector("img")?.getAttribute("src") || "";
-      if (fetchAllFlag) fetchAllFlag.value = quickPickFetchAllToggle?.checked ? "1" : "";
-      updateSelectedAppChip();
-      form.requestSubmit();
+      const csvPanel = document.getElementById("importPanelCsv");
+      if (csvPanel && !csvPanel.classList.contains("d-none")) {
+        document.getElementById("importTabPlay")?.click();
+      }
+      fillLiveFetchAppFromPick({
+        packageName: btn.dataset.package || "",
+        appName: btn.dataset.appName || "",
+        icon: btn.querySelector("img")?.getAttribute("src") || "",
+      });
     });
   });
 }
@@ -857,15 +874,11 @@ function initAppSuggestions() {
     suggestionsBox.querySelectorAll(".suggestion-item").forEach((item) => {
       item.addEventListener("click", () => {
         if (isAnalysisJobRunning()) return;
-        packageInput.value = item.dataset.package || "";
-        appNameInput.value = item.dataset.appName || "";
-        input.value = item.dataset.appName || "";
-        if (appIconInput) appIconInput.value = item.dataset.appIcon || "";
-        const ff = document.getElementById("fetchAllFlag");
-        if (ff) ff.value = "";
-        const pkgManual = document.getElementById("packageNameManual");
-        if (pkgManual) pkgManual.value = packageInput.value;
-        updateSelectedAppChip();
+        fillLiveFetchAppFromPick({
+          packageName: item.dataset.package || "",
+          appName: item.dataset.appName || "",
+          icon: item.dataset.appIcon || "",
+        });
         hideSuggestions();
       });
     });

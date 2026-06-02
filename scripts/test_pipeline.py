@@ -623,6 +623,31 @@ def test_skip_positive_tickets_markup():
     print("OK skip positive tickets markup")
 
 
+def test_quick_picks_fill_fields_only():
+    html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    assert "fillLiveFetchAppFromPick" in js
+    assert "quickPickFetchAllToggle" not in html
+    assert "Instant fetch" not in html
+    assert "Select an app to fill the import form" in html
+    popular_block = js.split("function initPopularAppButtons()", 1)[1].split("function initFetchAllButton()", 1)[0]
+    assert "form.requestSubmit();" not in popular_block
+    assert "fillLiveFetchAppFromPick" in popular_block
+    assert "importTabPlay" in popular_block
+    print("OK quick picks fill fields only")
+
+
+def test_quick_picks_hover_css():
+    theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+    scroll_block = theme_css.split(".rb-import-quick-row .quick-picks-scroll")[1].split("}", 1)[0]
+    assert "padding: 3px" in scroll_block or "padding-top: 3px" in scroll_block
+    assert ".quick-pick-card:hover" in style_css
+    assert "translateY(-1px)" in style_css
+    assert "border-color: #93c5fd" in style_css
+    print("OK quick picks hover CSS")
+
+
 def test_refresh_does_not_create_second_ticket():
     app = create_app()
     app.config["TESTING"] = True
@@ -1298,6 +1323,8 @@ if __name__ == "__main__":
     test_skip_positive_tickets_when_enabled()
     test_skip_positive_tickets_default_off()
     test_skip_positive_tickets_markup()
+    test_quick_picks_fill_fields_only()
+    test_quick_picks_hover_css()
     test_refresh_does_not_create_second_ticket()
     test_parse_review_row_helper()
     test_parse_review_count_no_upper_cap()

@@ -931,17 +931,13 @@ html {
   flex-direction: column;
 }
 
-#quickPicksCard .form-check {
-  flex-shrink: 0;
-}
-
 .rb-import-quick-row .quick-picks-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
-  padding-right: 0.15rem;
+  padding: 3px 0.15rem 4px 0;
 }
 
 .rb-import-quick-row .quick-picks-scroll::-webkit-scrollbar {

@@ -197,14 +197,10 @@
   <div class="rb-card-header rb-import-card-header">
     <div>
       <h2 class="rb-import-title h5 mb-1">Quick picks</h2>
-      <p class="rb-import-subtitle text-muted small mb-0">Instant fetch for popular apps</p>
+      <p class="rb-import-subtitle text-muted small mb-0">Select an app to fill the import form</p>
     </div>
   </div>
   <div class="rb-card-body">
-    <div class="form-check form-switch mb-3">
-      <input class="form-check-input" type="checkbox" id="quickPickFetchAllToggle">
-      <label class="form-check-label small" for="quickPickFetchAllToggle">Use Fetch all reviews for quick picks</label>
-    </div>
     <div class="quick-picks-scroll" role="region" aria-label="Popular app shortcuts" tabindex="0">
       <div class="quick-picks-grid">
         {% for app in popular_apps %}
