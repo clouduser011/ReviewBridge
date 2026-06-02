@@ -108,7 +108,7 @@ def _batch_now() -> datetime:
     return _normalize_batch_dt(datetime.utcnow())  # type: ignore[return-value]
 
 
-def _parse_dashboard_since(value: str | None) -> datetime | None:
+def _parse_analysis_since(value: str | None) -> datetime | None:
     if not value or not str(value).strip():
         return None
     try:
@@ -117,9 +117,9 @@ def _parse_dashboard_since(value: str | None) -> datetime | None:
         return None
 
 
-def _dashboard_view_since() -> datetime | None:
-    """Dashboard only shows a batch when `?since=ISO` is present (refresh / new visit = clean)."""
-    return _parse_dashboard_since(request.args.get("since"))
+def _analysis_view_since() -> datetime | None:
+    """Analysis workspace only shows a batch when `?since=ISO` is present (refresh / new visit = clean)."""
+    return _parse_analysis_since(request.args.get("since"))
 
 
 def _batch_review_filter(since: datetime):
@@ -604,7 +604,7 @@ def _professional_csv_bytes(report_title: str, rows: list[Review]) -> bytes:
     writer.writerow(
         [
             "Note",
-            "Use Excel export for colored cells matching the dashboard.",
+            "Use Excel export for colored cells matching the analysis workspace.",
         ]
     )
     writer.writerow([])
@@ -731,7 +731,7 @@ def home():
 
 @main_bp.route("/analysis")
 def analysis():
-    since = _dashboard_view_since()
+    since = _analysis_view_since()
     if since is None:
         session.pop("current_app_icon", None)
 
@@ -807,8 +807,8 @@ def analysis():
         has_review_results=has_review_results,
         show_pipeline_card=show_pipeline_card,
         pipeline_snapshot=pipeline_snapshot,
-        dashboard_since_iso=(since.isoformat() if since else None),
-        has_dashboard_export_data=(total_reviews > 0),
+        analysis_since_iso=(since.isoformat() if since else None),
+        has_analysis_export_data=(total_reviews > 0),
         percentages=percentages,
         stats={
             "total_reviews": total_reviews,
@@ -896,29 +896,39 @@ def clear_history():
     return redirect(url_for("main.history"))
 
 
-@main_bp.route("/dashboard/clear", methods=["POST"])
-def clear_dashboard():
+@main_bp.route("/analysis/clear", methods=["POST"])
+def clear_analysis():
     session.pop("active_fetch_job_id", None)
     session.pop("pipeline_snapshot", None)
     session.pop("current_app_icon", None)
-    flash("Dashboard cleared. Run a new fetch/upload to show latest batch.", "info")
+    flash("Analysis batch cleared. Run a new fetch/upload to show latest results.", "info")
     return redirect(url_for("main.analysis"))
 
 
-@main_bp.route("/export/dashboard.csv")
-def export_dashboard_csv():
-    since = _dashboard_view_since()
+@main_bp.route("/dashboard/clear", methods=["POST"])
+def clear_dashboard():
+    return clear_analysis()
+
+
+@main_bp.route("/export/analysis.csv")
+def export_analysis_csv():
+    since = _analysis_view_since()
     if since is None:
         rows = []
     else:
         rows = _batch_reviews_query(since).all()
 
-    data = _professional_csv_bytes("Dashboard Latest Reviews", rows)
+    data = _professional_csv_bytes("Analysis Batch Reviews", rows)
     return Response(
         data,
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=dashboard_latest_reviews.csv"},
+        headers={"Content-Disposition": "attachment; filename=analysis_batch_reviews.csv"},
     )
+
+
+@main_bp.route("/export/dashboard.csv")
+def export_dashboard_csv():
+    return export_analysis_csv()
 
 
 @main_bp.route("/export/history.csv")
@@ -932,15 +942,15 @@ def export_history_csv():
     )
 
 
-@main_bp.route("/export/dashboard.xlsx")
-def export_dashboard_xlsx():
-    since = _dashboard_view_since()
+@main_bp.route("/export/analysis.xlsx")
+def export_analysis_xlsx():
+    since = _analysis_view_since()
     if since is None:
         rows = []
     else:
         rows = _batch_reviews_query(since).all()
     xlsx = _build_professional_xlsx(
-        "Dashboard Latest Reviews",
+        "Analysis Batch Reviews",
         f"Generated UTC {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} · {len(rows)} row(s)",
         rows,
     )
@@ -953,8 +963,13 @@ def export_dashboard_xlsx():
     return Response(
         xlsx,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=dashboard_latest_reviews.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=analysis_batch_reviews.xlsx"},
     )
+
+
+@main_bp.route("/export/dashboard.xlsx")
+def export_dashboard_xlsx():
+    return export_analysis_xlsx()
 
 
 @main_bp.route("/export/history.xlsx")

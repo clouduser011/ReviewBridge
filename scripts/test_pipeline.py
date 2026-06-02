@@ -1,4 +1,4 @@
-"""Smoke-test analysis pipeline API and dashboard markup."""
+"""Smoke-test analysis pipeline API and analysis workspace markup."""
 import json
 import sys
 import time
@@ -60,7 +60,7 @@ def test_analysis_markup():
         "rb-pipeline-stats",
         "quickPicksCard",
         "quick-picks-scroll",
-        "dashboardMainContent",
+        "analysisMainContent",
         "rb-ticket-platform-strip",
         "rb-ticket-platform-chip",
         "rb-tickets-panel-body",
@@ -84,11 +84,11 @@ def test_analysis_markup():
     assert not missing, f"Missing in analysis.html: {missing}"
     idx_import = html.find("rb-import-quick-row")
     idx_pipeline = html.find("analysisPipelineCard")
-    idx_main = html.find('id="dashboardMainContent"')
+    idx_main = html.find('id="analysisMainContent"')
     idx_adv_toggle = html.find("toggleAdvancedOptionsSwitch")
     idx_fetch_btn = html.find("btnFetchLimited")
     assert 0 <= idx_import < idx_pipeline < idx_main, (
-        "Expected import row, then pipeline card, then dashboardMainContent"
+        "Expected import row, then pipeline card, then analysisMainContent"
     )
     assert 0 <= idx_adv_toggle < idx_fetch_btn, (
         "Expected Advanced options to appear before fetch buttons in analysis import form"
@@ -119,6 +119,7 @@ def test_app_nav_has_home_link():
     assert ">Home</a>" in nav_block
     assert nav_block.index(">Home</a>") < nav_block.index(">Analysis</a>")
 
+    assert "analysis.js" not in base_html
     assert "rb-nav-inner--landing" in landing_base
     landing_pills = landing_base.split('class="rb-nav-pills"')[1].split("</div>")[0]
     assert "main.home" in landing_pills
@@ -137,7 +138,7 @@ def test_app_nav_has_home_link():
 def test_sticky_nav_scroll_offset_css():
     theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
     style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
-    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
 
     assert "--rb-sticky-nav-offset:" in theme_css
     assert "scroll-padding-top: var(--rb-sticky-nav-offset)" in theme_css
@@ -238,8 +239,9 @@ def test_export_download_options():
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     home_html = (ROOT / "app" / "templates" / "home.html").read_text(encoding="utf-8")
 
-    assert "export_dashboard_csv" in analysis_html
-    assert "export_dashboard_xlsx" in analysis_html
+    assert "export_analysis_csv" in analysis_html
+    assert "export_analysis_xlsx" in analysis_html
+    assert "clear_analysis" in analysis_html
     assert "export_history_csv" in history_html
     assert "export_history_xlsx" in history_html
 
@@ -251,6 +253,9 @@ def test_export_download_options():
         assert ">CSV</a>" in html
         assert ">Excel</a>" in html
 
+    assert "export_analysis_csv" in routes_py
+    assert "export_dashboard_csv" in routes_py
+    assert "clear_analysis" in routes_py
     assert "export_dashboard_pdf" not in routes_py
     assert "export_history_pdf" not in routes_py
     assert "_build_professional_pdf" not in routes_py
@@ -264,6 +269,11 @@ def test_export_download_options():
         client = app.test_client()
         assert client.get("/export/dashboard.pdf").status_code == 404
         assert client.get("/export/history.pdf").status_code == 404
+        csv_res = client.get("/export/analysis.csv")
+        assert csv_res.status_code == 200
+        assert "analysis_batch_reviews.csv" in csv_res.headers.get("Content-Disposition", "")
+        legacy_csv = client.get("/export/dashboard.csv")
+        assert legacy_csv.status_code == 200
     print("OK export download options")
 
 
@@ -289,7 +299,7 @@ def test_history_page_no_dashboard_charts():
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "chart.umd.min.js" not in html
-    assert "dashboard.js" not in html
+    assert "analysis.js" not in html
     assert "sentimentChart" not in html
     print("OK history page without chart scripts")
 
@@ -457,13 +467,13 @@ def test_skip_positive_tickets_default_off():
 
 def test_review_results_filter_js():
     filter_js = (ROOT / "app" / "static" / "js" / "review-filter.js").read_text(encoding="utf-8")
-    dashboard_js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    analysis_js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
     assert "mountReviewTableFilter" in filter_js
     assert "is-filtered-out" in filter_js
-    assert "function initReviewResultsFilter" in dashboard_js
-    assert "mountReviewTableFilter" in dashboard_js
-    assert "initReviewResultsFilter();" in dashboard_js
-    init_suggestions_block = dashboard_js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
+    assert "function initReviewResultsFilter" in analysis_js
+    assert "mountReviewTableFilter" in analysis_js
+    assert "initReviewResultsFilter();" in analysis_js
+    init_suggestions_block = analysis_js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
     assert "form.requestSubmit();" not in init_suggestions_block
     print("OK review results filter JS")
 
@@ -716,7 +726,7 @@ def test_app_suggestions_play_only_pk_smoke():
 
 
 def test_search_js_country_change_rerun():
-    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
     init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
     assert "fetchCountryInput" in init_block
     assert "runSearch" in init_block
@@ -726,7 +736,7 @@ def test_search_js_country_change_rerun():
 
 
 def test_search_js_play_loading_state():
-    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
     style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
     assert "debounceTimer" in init_block
@@ -768,7 +778,7 @@ def test_form_switch_refined_styles():
 
 def test_skip_positive_tickets_markup():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
-    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
     assert "rb-import-switches-row" in html
     assert "skipPositiveTicketsSwitch" in html
     assert "skipPositiveTicketsSwitchCsv" in html
@@ -791,7 +801,7 @@ def test_skip_positive_tickets_markup():
 
 def test_quick_picks_fill_fields_only():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
-    js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "analysis.js").read_text(encoding="utf-8")
     assert "fillLiveFetchAppFromPick" in js
     assert "quickPickFetchAllToggle" not in html
     assert "Instant fetch" not in html
@@ -1027,7 +1037,7 @@ def test_clean_clears_stale_snapshot():
     print("OK clean clears stale snapshot")
 
 
-def test_clear_dashboard_clears_pipeline_snapshot():
+def test_clear_analysis_clears_pipeline_snapshot():
     app = create_app()
     app.config["TESTING"] = True
     client = app.test_client()
@@ -1035,7 +1045,7 @@ def test_clear_dashboard_clears_pipeline_snapshot():
     with client.session_transaction() as sess:
         sess["pipeline_snapshot"] = {"status": "completed", "progress": 100, "phase": "finalize"}
 
-    clear_res = client.post("/dashboard/clear", follow_redirects=True)
+    clear_res = client.post("/analysis/clear", follow_redirects=True)
     assert clear_res.status_code == 200
     html = clear_res.get_data(as_text=True)
     pipeline_class = html.split('id="analysisPipelineCard"')[1].split(">")[0]
@@ -1043,7 +1053,14 @@ def test_clear_dashboard_clears_pipeline_snapshot():
     assert 'data-has-review-results="false"' in pipeline_class
     with client.session_transaction() as sess:
         assert sess.get("pipeline_snapshot") is None
-    print("OK clear dashboard clears pipeline snapshot")
+
+    with client.session_transaction() as sess:
+        sess["pipeline_snapshot"] = {"status": "completed", "progress": 100, "phase": "finalize"}
+    legacy_clear = client.post("/dashboard/clear", follow_redirects=True)
+    assert legacy_clear.status_code == 200
+    with client.session_transaction() as sess:
+        assert sess.get("pipeline_snapshot") is None
+    print("OK clear analysis clears pipeline snapshot")
 
 
 def test_play_fetch_helpers():
@@ -1465,7 +1482,7 @@ if __name__ == "__main__":
     test_analysis_empty_shows_guided_onboarding()
     test_clean_no_job_shows_pipeline()
     test_clean_clears_stale_snapshot()
-    test_clear_dashboard_clears_pipeline_snapshot()
+    test_clear_analysis_clears_pipeline_snapshot()
     test_analysis_markup()
     test_review_results_filter_js()
     test_app_match_ranking_name_first()

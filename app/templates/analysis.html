@@ -13,16 +13,16 @@
       <p class="rb-page-subtitle">Fetch Google Play reviews, run sentiment analysis, and route tickets—all in one place.</p>
     </div>
     <div class="rb-page-actions">
-      {% if has_dashboard_export_data %}
+      {% if has_analysis_export_data %}
       <div class="dropdown">
         <button class="btn btn-sm rb-btn-outline dropdown-toggle" type="button" data-bs-toggle="dropdown">Download</button>
         <ul class="dropdown-menu">
-          <li><a class="dropdown-item" href="{{ url_for('main.export_dashboard_csv', since=dashboard_since_iso) }}">CSV</a></li>
-          <li><a class="dropdown-item" href="{{ url_for('main.export_dashboard_xlsx', since=dashboard_since_iso) }}">Excel</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('main.export_analysis_csv', since=analysis_since_iso) }}">CSV</a></li>
+          <li><a class="dropdown-item" href="{{ url_for('main.export_analysis_xlsx', since=analysis_since_iso) }}">Excel</a></li>
         </ul>
       </div>
       {% endif %}
-      <form action="{{ url_for('main.clear_dashboard') }}" method="post" class="m-0">
+      <form action="{{ url_for('main.clear_analysis') }}" method="post" class="m-0">
         <button class="btn btn-sm rb-btn-outline" type="submit">Clear batch</button>
       </form>
       <div class="rb-context-pill">
@@ -269,11 +269,11 @@
           <span class="pipeline-step-desc">Jira for bugs/features, Zendesk for support</span>
         </span>
       </li>
-      <li class="pipeline-step is-pending" data-phase="finalize" title="Saving results to dashboard">
+      <li class="pipeline-step is-pending" data-phase="finalize" title="Saving analysis results">
         <span class="pipeline-step-icon" aria-hidden="true"></span>
         <span class="pipeline-step-text">
           <span class="pipeline-step-title">Finish</span>
-          <span class="pipeline-step-desc">Saving results to dashboard</span>
+          <span class="pipeline-step-desc">Saving analysis results</span>
         </span>
       </li>
     </ul>
@@ -289,7 +289,7 @@
   </div>
 </div>
 
-<div id="dashboardMainContent" class="{% if active_fetch_job_id %}analysis-backdrop-active{% endif %}">
+<div id="analysisMainContent" class="{% if active_fetch_job_id %}analysis-backdrop-active{% endif %}">
 
 <div class="row g-4 mb-4" id="liveAnalysisPanels">
   <div class="col-lg-8">
@@ -416,5 +416,5 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', filename='js/review-filter.js') }}"></script>
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', filename='js/analysis.js') }}"></script>
 {% endblock %}

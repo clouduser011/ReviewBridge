@@ -191,7 +191,7 @@ function setAnalysisJobRunning(running) {
 }
 
 function setAnalysisBackdrop(active) {
-  const main = document.getElementById("dashboardMainContent");
+  const main = document.getElementById("analysisMainContent");
   if (main) main.classList.toggle("analysis-backdrop-active", active);
 }
 

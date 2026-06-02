@@ -9,14 +9,30 @@ load_dotenv()
 db = SQLAlchemy()
 migrate = Migrate()
 
+DEFAULT_DATABASE_URI = "sqlite:///instance/reviewbridge.db"
+LEGACY_DATABASE_URI = "sqlite:///instance/review_analyzer.db"
+
+
+def _resolve_database_uri() -> str:
+    explicit = os.getenv("DATABASE_URL")
+    if explicit:
+        return explicit
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    instance_dir = os.path.join(root, "instance")
+    new_path = os.path.join(instance_dir, "reviewbridge.db")
+    legacy_path = os.path.join(instance_dir, "review_analyzer.db")
+
+    if os.path.isfile(legacy_path) and not os.path.isfile(new_path):
+        return LEGACY_DATABASE_URI
+    return DEFAULT_DATABASE_URI
+
 
 def create_app():
     app = Flask(__name__)
 
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret")
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL", "sqlite:///instance/review_analyzer.db"
-    )
+    app.config["SQLALCHEMY_DATABASE_URI"] = _resolve_database_uri()
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     db.init_app(app)
