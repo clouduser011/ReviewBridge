@@ -573,6 +573,7 @@ def test_app_suggestions_typed_search():
 
 def test_search_js_simple_api_debounce():
     js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
     init_block = js.split("function initAppSuggestions()", 1)[1].split("function initReviewResultsFilter()", 1)[0]
     assert "debounceTimer" in init_block
     assert "/api/app-suggestions" in init_block
@@ -582,15 +583,42 @@ def test_search_js_simple_api_debounce():
     assert "loadAppCatalog" not in init_block
     assert "app-suggestions-panel--floating" not in init_block
     assert "showLoading" not in init_block
+    assert "#dataImportCard" in style_css
+    assert "overflow: visible" in style_css
+    assert ".app-search-wrap" in style_css
+    assert "max-width: 22rem" in style_css
     print("OK search JS simple API debounce")
+
+
+def test_form_switch_refined_styles():
+    theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    assert "--rb-switch-off" in theme_css
+    assert ".app-body .form-switch" in theme_css
+    assert "width: 2em" in theme_css
+    assert "width: 2.75em" not in theme_css
+    assert "fill='%23fff'" not in theme_css
+    print("OK form switch refined styles")
 
 
 def test_skip_positive_tickets_markup():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
     js = (ROOT / "app" / "static" / "js" / "dashboard.js").read_text(encoding="utf-8")
+    assert "rb-import-switches-row" in html
     assert "skipPositiveTicketsSwitch" in html
+    assert "skipPositiveTicketsSwitchCsv" in html
     assert "Skip tickets for positive reviews" in html
+    row_start = html.index("rb-import-switches-row")
+    row_end = html.index("advancedOptionsPanel", row_start)
+    switches_row = html[row_start:row_end]
+    assert "toggleAdvancedOptionsSwitch" in switches_row
+    assert "skipPositiveTicketsSwitch" in switches_row
+    assert html.index("skipPositiveTicketsSwitch") < html.index("advancedOptionsPanel")
+    assert html.index("advancedOptionsPanel") < html.index("btnFetchLimited")
+    tabs_end = html.index("rb-import-tabs") + len("rb-import-tabs")
+    assert html.index("skipPositiveTicketsSwitch") > tabs_end
     assert "appendSkipPositiveTickets" in js
+    assert "isSkipPositiveTicketsEnabled" in js
+    assert "syncSkipPositiveTicketsSwitches" in js
     assert "skip_positive_tickets" in js
     print("OK skip positive tickets markup")
 
@@ -1255,6 +1283,7 @@ if __name__ == "__main__":
     test_app_catalog_module_loads()
     test_app_suggestions_typed_search()
     test_search_js_simple_api_debounce()
+    test_form_switch_refined_styles()
     test_app_nav_has_home_link()
     test_sticky_nav_scroll_offset_css()
     test_footer_sticky_layout_css()

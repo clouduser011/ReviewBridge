@@ -86,14 +86,6 @@
       <button type="button" class="rb-import-tab" role="tab" aria-selected="false" aria-controls="importPanelCsv" data-import-tab="csv" id="importTabCsv">Upload CSV</button>
     </div>
 
-    <div class="rb-import-ticketing-option mb-3">
-      <div class="form-check form-switch">
-        <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitch" value="1">
-        <label class="form-check-label small" for="skipPositiveTicketsSwitch">Skip tickets for positive reviews</label>
-      </div>
-      <p class="rb-import-hint mb-0">Reviews are still imported and analyzed. Off by default.</p>
-    </div>
-
     <div id="importPanelPlay" class="rb-import-panel is-active" role="tabpanel" aria-labelledby="importTabPlay">
       <form id="liveFetchForm" action="{{ url_for('main.start_fetch_from_google_play') }}" method="post">
         <input type="hidden" id="packageNameInput" name="package_name" required>
@@ -116,7 +108,7 @@
           <div class="col-md-4">
             <label class="form-label" for="countInput">Reviews to fetch</label>
             <input type="number" id="countInput" name="count" class="form-control rb-import-input" value="100" min="1" step="1" inputmode="numeric">
-            <p class="rb-import-hint mb-0">No upper limit; very large counts take longer to download and analyze.</p>
+            <p class="rb-import-hint mb-0">Very large counts take longer to download and analyze.</p>
           </div>
           <div class="col-md-8">
             <label class="form-label" for="fetchCountryInput">Store region</label>
@@ -135,15 +127,20 @@
               <option value="au">Australia</option>
               <option value="ww">Worldwide (fetch all only)</option>
             </select>
-            <p class="rb-import-hint mb-0">Match your device’s Play country; compare using <strong>Newest</strong> on Play.</p>
           </div>
         </div>
 
-        <div class="form-check form-switch mb-2">
-          <input class="form-check-input" type="checkbox" id="toggleAdvancedOptionsSwitch">
-          <label class="form-check-label small" for="toggleAdvancedOptionsSwitch">Advanced options</label>
+        <div class="rb-import-switches-row mb-2">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="toggleAdvancedOptionsSwitch">
+            <label class="form-check-label small" for="toggleAdvancedOptionsSwitch">Advanced options</label>
+          </div>
+          <div class="form-check form-switch">
+            <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitch" value="1">
+            <label class="form-check-label small" for="skipPositiveTicketsSwitch">Skip tickets for positive reviews</label>
+          </div>
         </div>
-        <div id="advancedOptionsPanel" class="rb-import-advanced d-none">
+        <div id="advancedOptionsPanel" class="rb-import-advanced d-none mb-3">
           <div class="row g-3">
             <div class="col-md-4">
               <label class="form-label">Package name</label>
@@ -184,6 +181,10 @@
             <input type="file" id="csvFileInput" name="review_file" accept=".csv" class="rb-file-upload-input" required>
           </label>
           <p class="rb-import-hint mb-0">Columns: author, rating, content</p>
+        </div>
+        <div class="form-check form-switch mb-3">
+          <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitchCsv" value="1">
+          <label class="form-check-label small" for="skipPositiveTicketsSwitchCsv">Skip tickets for positive reviews</label>
         </div>
         <button type="submit" class="btn rb-btn-primary w-100 w-md-auto" id="btnCsvUpload">Analyze CSV</button>
       </form>

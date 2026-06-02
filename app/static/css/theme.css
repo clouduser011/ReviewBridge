@@ -11,6 +11,9 @@
   --rb-border: #e2e8f0;
   --rb-text: #0f172a;
   --rb-text-muted: #64748b;
+  --rb-switch-off: #e2e8f0;
+  --rb-switch-off-border: #cbd5e1;
+  --rb-switch-focus-ring: rgba(59, 130, 246, 0.2);
   --rb-radius: 14px;
   --rb-radius-lg: 16px;
   --rb-radius-xl: 20px;
@@ -757,6 +760,79 @@ html {
   font-size: 0.75rem;
   color: var(--rb-text-muted);
   margin-top: 0.35rem;
+}
+
+.rb-import-switches-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 2rem;
+  row-gap: 0.75rem;
+}
+
+.rb-import-switches-row .form-switch {
+  margin-bottom: 0;
+  flex: 0 1 auto;
+}
+
+@media (max-width: 575px) {
+  .rb-import-switches-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.app-body .form-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding-left: 0;
+  min-height: 1.25rem;
+}
+
+.app-body .form-switch .form-check-input {
+  float: none;
+  width: 2em;
+  height: 1.05em;
+  margin-left: 0;
+  margin-top: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  background-color: var(--rb-switch-off);
+  border: 1px solid var(--rb-switch-off-border);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-body .form-switch .form-check-input:checked {
+  background-color: var(--rb-accent);
+  border-color: var(--rb-accent);
+}
+
+.app-body .form-switch .form-check-input:focus {
+  border-color: var(--rb-accent);
+  box-shadow: 0 0 0 0.2rem var(--rb-switch-focus-ring);
+  outline: none;
+}
+
+.app-body .form-switch .form-check-input:focus:not(:checked) {
+  border-color: #94a3b8;
+}
+
+.app-body .form-switch .form-check-input:hover:not(:disabled):not(:checked) {
+  background-color: #d8dee6;
+  border-color: #94a3b8;
+}
+
+.app-body .form-switch .form-check-input:checked:hover:not(:disabled) {
+  background-color: var(--rb-accent-dark);
+  border-color: var(--rb-accent-dark);
+}
+
+.app-body .form-switch .form-check-label {
+  color: var(--rb-text);
+  font-weight: 500;
+  cursor: pointer;
+  line-height: 1.4;
 }
 
 .rb-selected-app-chip {

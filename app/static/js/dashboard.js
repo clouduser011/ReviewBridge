@@ -1,10 +1,26 @@
 const PIPELINE_PHASES = ["prepare", "load", "analyzing", "ticketing", "finalize"];
 
+function isSkipPositiveTicketsEnabled() {
+  const csvPanel = document.getElementById("importPanelCsv");
+  if (csvPanel && !csvPanel.classList.contains("d-none")) {
+    return document.getElementById("skipPositiveTicketsSwitchCsv")?.checked ?? false;
+  }
+  return document.getElementById("skipPositiveTicketsSwitch")?.checked ?? false;
+}
+
 function appendSkipPositiveTickets(formData) {
-  const el = document.getElementById("skipPositiveTicketsSwitch");
-  if (el?.checked) {
+  if (isSkipPositiveTicketsEnabled()) {
     formData.set("skip_positive_tickets", "1");
   }
+}
+
+function syncSkipPositiveTicketsSwitches(source) {
+  const playSkip = document.getElementById("skipPositiveTicketsSwitch");
+  const csvSkip = document.getElementById("skipPositiveTicketsSwitchCsv");
+  if (!playSkip || !csvSkip) return;
+  const checked = source ? source.checked : playSkip.checked;
+  playSkip.checked = checked;
+  csvSkip.checked = checked;
 }
 
 function getStickyNavScrollOffset() {
@@ -356,8 +372,15 @@ function initImportTabs() {
       tab.classList.toggle("is-active", active);
       tab.setAttribute("aria-selected", active ? "true" : "false");
     });
+    syncSkipPositiveTicketsSwitches();
     requestAnimationFrame(syncQuickPicksRowHeights);
   };
+
+  const playSkip = document.getElementById("skipPositiveTicketsSwitch");
+  const csvSkip = document.getElementById("skipPositiveTicketsSwitchCsv");
+  playSkip?.addEventListener("change", () => syncSkipPositiveTicketsSwitches(playSkip));
+  csvSkip?.addEventListener("change", () => syncSkipPositiveTicketsSwitches(csvSkip));
+  syncSkipPositiveTicketsSwitches();
 
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
