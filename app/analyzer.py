@@ -35,30 +35,80 @@ def review_storage_id(
     return content_hash_storage_id(app_name, author, content, rating)
 
 
+def scoped_storage_id(
+    owner_user_id: int | None,
+    owner_session_key: str | None,
+    app_name: str,
+    play_review_id: str | None,
+    author: str,
+    content: str,
+    rating: int,
+) -> str:
+    base = review_storage_id(app_name, play_review_id, author, content, rating)
+    if owner_user_id:
+        return f"u{owner_user_id}:{base}"
+    if owner_session_key:
+        return f"a{owner_session_key}:{base}"
+    return base
+
+
+def _owner_filter(query, user_id: int | None, owner_session_key: str | None):
+    from .models import Review
+
+    if user_id:
+        return query.filter(Review.user_id == user_id)
+    if owner_session_key:
+        return query.filter(
+            Review.user_id.is_(None),
+            Review.owner_session_key == owner_session_key,
+        )
+    return query.filter(Review.user_id.is_(None), Review.owner_session_key.is_(None))
+
+
 def find_existing_review(
     app_name: str,
     play_review_id: str | None,
     author: str,
     content: str,
     rating: int,
+    *,
+    user_id: int | None = None,
+    owner_session_key: str | None = None,
 ):
-    """Find a stored review by canonical id, Play reviewId, or content hash."""
+    """Find a stored review by canonical id, Play reviewId, or content hash (owner-scoped)."""
     from .models import Review
 
-    canonical_id = review_storage_id(app_name, play_review_id, author, content, rating)
-    existing = Review.query.filter_by(review_id=canonical_id).first()
+    canonical_id = scoped_storage_id(
+        user_id, owner_session_key, app_name, play_review_id, author, content, rating
+    )
+    existing = _owner_filter(Review.query.filter_by(review_id=canonical_id), user_id, owner_session_key).first()
     if existing:
         return existing
 
     play_id = (play_review_id or "").strip()
     if play_id:
-        existing = Review.query.filter_by(review_id=play_storage_id(play_id)).first()
+        scoped_play = scoped_storage_id(user_id, owner_session_key, app_name, play_id, author, content, rating)
+        existing = _owner_filter(Review.query.filter_by(review_id=scoped_play), user_id, owner_session_key).first()
         if existing:
             return existing
+        play_only = play_storage_id(play_id)
+        for candidate_id in (f"u{user_id}:{play_only}" if user_id else None, f"a{owner_session_key}:{play_only}" if owner_session_key else None, play_only):
+            if not candidate_id:
+                continue
+            existing = _owner_filter(Review.query.filter_by(review_id=candidate_id), user_id, owner_session_key).first()
+            if existing:
+                return existing
 
     hash_id = content_hash_storage_id(app_name, author, content, rating)
-    if hash_id != canonical_id:
-        existing = Review.query.filter_by(review_id=hash_id).first()
+    for candidate_id in (
+        scoped_storage_id(user_id, owner_session_key, app_name, None, author, content, rating),
+        f"u{user_id}:{hash_id}" if user_id else None,
+        f"a{owner_session_key}:{hash_id}" if owner_session_key else None,
+        hash_id,
+    ):
+        if not candidate_id:
+            continue
+        existing = _owner_filter(Review.query.filter_by(review_id=candidate_id), user_id, owner_session_key).first()
         if existing:
             return existing
 

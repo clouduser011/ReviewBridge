@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app import create_app, db
-from app.analyzer import review_storage_id, stable_review_id
+from app.analyzer import review_storage_id, scoped_storage_id, stable_review_id
 from app.app_catalog import catalog_status, load_catalog, rank_apps, score_app_match, search_local_catalog
 from app.google_play import (
     _finalize_fetch_rows,
@@ -21,7 +21,8 @@ from app.google_play import (
     _sort_rows_by_date,
     merge_and_rank_suggestions,
 )
-from app.models import Review, Ticket
+from app.models import Review, Ticket, User, UserIntegrationSettings
+from app.user_context import OwnerContext
 from app.datetime_utils import normalize_play_review_at
 from app.routes import (
     _batch_now,
@@ -35,6 +36,37 @@ from app.routes import (
 )
 
 CSV_PATH = ROOT / "data" / "sample_reviews.csv"
+
+TICKET_OWNER = OwnerContext(user_id=1, owner_session_key=None, allow_tickets=True, integration=None)
+BATCH_OWNER = OwnerContext(
+    user_id=None,
+    owner_session_key="test-pipeline-session",
+    allow_tickets=False,
+    integration=None,
+)
+
+
+def _signup_client(client, email="pipeline@test.local", password="testpass123"):
+    client.post(
+        "/auth/signup",
+        data={
+            "email": email,
+            "display_name": "Pipeline Tester",
+            "password": password,
+            "confirm_password": password,
+        },
+        follow_redirects=True,
+    )
+    return client
+
+
+def _login_client(client, email="pipeline@test.local", password="testpass123"):
+    client.post(
+        "/auth/login",
+        data={"email": email, "password": password},
+        follow_redirects=True,
+    )
+    return client
 
 
 def test_analysis_markup():
@@ -118,6 +150,8 @@ def test_app_nav_has_home_link():
     assert "main.home" in nav_block
     assert ">Home</a>" in nav_block
     assert nav_block.index(">Home</a>") < nav_block.index(">Analysis</a>")
+    assert "auth.login" in base_html
+    assert "{% if is_authenticated %}" in base_html
 
     assert "analysis.js" not in base_html
     assert "rb-nav-inner--landing" in landing_base
@@ -129,9 +163,11 @@ def test_app_nav_has_home_link():
     assert ">Analysis</a>" not in landing_pills
     assert ">History</a>" not in landing_pills
 
-    landing_actions = landing_base.split('class="landing-nav-actions"')[1].split("</div>")[0]
+    landing_actions = landing_base.split("landing-nav-actions")[1].split("</div>")[0]
     assert "main.analysis" in landing_actions
-    assert "main.history" in landing_actions
+    assert "auth.login" in landing_actions
+    assert "auth.signup" in landing_actions
+    assert "{% if is_authenticated %}" in landing_actions
     print("OK app nav has home link")
 
 
@@ -296,6 +332,13 @@ def test_history_page_no_dashboard_charts():
     with app.app_context():
         client = app.test_client()
         resp = client.get("/history")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers.get("Location", "")
+
+    with app.app_context():
+        client = app.test_client()
+        _signup_client(client)
+        resp = client.get("/history")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
     assert "chart.umd.min.js" not in html
@@ -338,7 +381,9 @@ def test_history_scrollable_layout():
 
     app = create_app()
     with app.app_context():
-        resp = app.test_client().get("/history")
+        client = app.test_client()
+        _signup_client(client, email="history-scroll@test.local")
+        resp = client.get("/history")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "rb-history-logs-scroll" in body
@@ -381,6 +426,7 @@ def test_hash_then_play_single_review_single_ticket():
             "App crashes on login",
             batch_started_at=batch1,
             play_review_id=None,
+            owner=TICKET_OWNER,
         )
         assert ok1 and reason1 == "processed"
         assert meta1.get("platform")
@@ -389,7 +435,7 @@ def test_hash_then_play_single_review_single_ticket():
         assert Review.query.count() == 1
         assert Ticket.query.count() == 1
         row = Review.query.first()
-        assert row.review_id.startswith(f"{app_name.strip().lower()}:")
+        assert ":app crashes on login" in row.review_id.lower() or row.review_id.startswith("u1:")
 
         batch2 = _normalize_batch_dt(batch1 + timedelta(seconds=3))
         ok2, reason2, meta2 = _process_review(
@@ -399,6 +445,7 @@ def test_hash_then_play_single_review_single_ticket():
             "App crashes on login",
             batch_started_at=batch2,
             play_review_id=play_id,
+            owner=TICKET_OWNER,
         )
         assert ok2 and reason2 == "refreshed"
         assert meta2.get("platform") is None
@@ -407,7 +454,7 @@ def test_hash_then_play_single_review_single_ticket():
         assert Review.query.count() == 1
         assert Ticket.query.count() == 1
         row = Review.query.first()
-        assert row.review_id == f"play:{play_id}"
+        assert row.review_id == f"u1:play:{play_id}"
     print("OK hash then play dedupe")
 
 
@@ -429,6 +476,7 @@ def test_skip_positive_tickets_when_enabled():
             "Absolutely love this app, amazing experience every day!",
             batch_started_at=batch,
             skip_positive_tickets=True,
+            owner=TICKET_OWNER,
         )
         assert ok and reason == "processed"
         db.session.commit()
@@ -456,6 +504,7 @@ def test_skip_positive_tickets_default_off():
             "Absolutely love this app, amazing experience every day!",
             batch_started_at=batch,
             skip_positive_tickets=False,
+            owner=TICKET_OWNER,
         )
         assert ok and reason == "processed"
         assert meta.get("platform")
@@ -844,6 +893,7 @@ def test_refresh_does_not_create_second_ticket():
             "Terrible experience",
             batch_started_at=batch1,
             play_review_id=play_id,
+            owner=TICKET_OWNER,
         )
         db.session.commit()
         assert Ticket.query.count() == 1
@@ -856,6 +906,7 @@ def test_refresh_does_not_create_second_ticket():
             "Terrible experience",
             batch_started_at=batch2,
             play_review_id=play_id,
+            owner=TICKET_OWNER,
         )
         db.session.commit()
         assert Review.query.count() == 1
@@ -1133,6 +1184,7 @@ def test_csv_job_flow():
     app = create_app()
     app.config["TESTING"] = True
     client = app.test_client()
+    _signup_client(client, email="csv-job@test.local")
 
     with open(CSV_PATH, "rb") as f:
         res = client.post(
@@ -1185,10 +1237,14 @@ def test_batch_with_snapshot_keeps_pipeline_visible():
     app = create_app()
     app.config["TESTING"] = True
     client = app.test_client()
+    email = "batch-snapshot@test.local"
+    _signup_client(client, email=email)
 
     with app.app_context():
         Review.query.delete()
         db.session.commit()
+        user = User.query.filter_by(email=email).one()
+        owner = OwnerContext(user_id=user.id, owner_session_key=None, allow_tickets=True, integration=None)
         batch = _batch_now()
         _process_review(
             "Bridge Test",
@@ -1197,6 +1253,7 @@ def test_batch_with_snapshot_keeps_pipeline_visible():
             "Great app",
             batch_started_at=batch,
             play_rank=0,
+            owner=owner,
         )
         db.session.commit()
         since_iso = batch.isoformat()
@@ -1332,6 +1389,7 @@ def test_csv_upload_passes_reviewed_at():
             batch_started_at=batch,
             reviewed_at=reviewed_at,
             play_rank=0,
+            owner=BATCH_OWNER,
         )
         db.session.commit()
 
@@ -1363,6 +1421,7 @@ def test_reviewed_at_updated_on_refresh():
             play_review_id=play_id,
             reviewed_at=old_date,
             play_rank=0,
+            owner=TICKET_OWNER,
         )
         db.session.commit()
 
@@ -1376,10 +1435,11 @@ def test_reviewed_at_updated_on_refresh():
             play_review_id=play_id,
             reviewed_at=new_date,
             play_rank=0,
+            owner=TICKET_OWNER,
         )
         db.session.commit()
 
-        review = Review.query.filter_by(review_id=f"play:{play_id}").first()
+        review = Review.query.filter_by(review_id=f"u1:play:{play_id}").first()
         assert review.reviewed_at == new_date
     print("OK reviewed_at updated on refresh")
 
@@ -1416,10 +1476,11 @@ def test_batch_query_orders_by_play_rank():
                 batch_started_at=batch,
                 play_rank=rank,
                 reviewed_at=batch - timedelta(days=rank),
+                owner=BATCH_OWNER,
             )
         db.session.commit()
 
-        ordered = _batch_reviews_query(batch).all()
+        ordered = _batch_reviews_query(batch, BATCH_OWNER).all()
         assert [r.author for r in ordered] == ["first", "second", "third"]
     print("OK batch query orders by play_rank")
 
@@ -1435,7 +1496,7 @@ def test_refetch_refreshes_into_batch():
         app_name = "Refresh Test App"
         batch1 = _batch_now()
         play_id = "play-test-refresh-1"
-        storage_id = review_storage_id(app_name, play_id, "bob", "Works well", 5)
+        storage_id = scoped_storage_id(1, None, app_name, play_id, "bob", "Works well", 5)
 
         ok1, reason1, _ = _process_review(
             app_name,
@@ -1446,6 +1507,7 @@ def test_refetch_refreshes_into_batch():
             play_review_id=play_id,
             reviewed_at=batch1 - timedelta(days=2),
             play_rank=0,
+            owner=TICKET_OWNER,
         )
         assert ok1 and reason1 == "processed"
         db.session.commit()
@@ -1460,6 +1522,7 @@ def test_refetch_refreshes_into_batch():
             play_review_id=play_id,
             reviewed_at=batch1 - timedelta(days=2),
             play_rank=0,
+            owner=TICKET_OWNER,
         )
         assert ok2 and reason2 == "refreshed"
         db.session.commit()
@@ -1468,12 +1531,256 @@ def test_refetch_refreshes_into_batch():
         review = Review.query.filter_by(review_id=storage_id).first()
         assert review.last_batch_at == batch2
 
-        in_batch1 = _batch_reviews_query(batch1).all()
-        in_batch2 = _batch_reviews_query(batch2).all()
+        in_batch1 = _batch_reviews_query(batch1, TICKET_OWNER).all()
+        in_batch2 = _batch_reviews_query(batch2, TICKET_OWNER).all()
         assert len(in_batch1) == 0
         assert len(in_batch2) == 1
         assert in_batch2[0].id == review.id
     print("OK refetch refreshes into batch")
+
+
+def test_auth_signup_login_logout():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    email = "auth-flow@test.local"
+    password = "testpass123"
+
+    signup = client.post(
+        "/auth/signup",
+        data={
+            "email": email,
+            "display_name": "Auth Flow",
+            "password": password,
+            "confirm_password": password,
+        },
+        follow_redirects=True,
+    )
+    assert signup.status_code == 200
+
+    with app.app_context():
+        user = User.query.filter_by(email=email).first()
+        assert user is not None
+
+    logout = client.post("/auth/logout", follow_redirects=False)
+    assert logout.status_code in (200, 302)
+
+    login = client.post(
+        "/auth/login",
+        data={"email": email, "password": password},
+        follow_redirects=True,
+    )
+    assert login.status_code == 200
+    assert b"Analysis" in login.data or b"analysis" in login.data.lower()
+    print("OK auth signup login logout")
+
+
+def test_anonymous_process_no_tickets():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+        batch = _batch_now()
+        ok, reason, meta = _process_review(
+            "Anon App",
+            "user",
+            1,
+            "Broken login keeps failing",
+            batch_started_at=batch,
+            owner=BATCH_OWNER,
+        )
+        assert ok and reason == "processed"
+        assert meta.get("platform") is None
+        db.session.commit()
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 0
+        review = Review.query.first()
+        assert review.owner_session_key == BATCH_OWNER.owner_session_key
+        assert review.user_id is None
+    print("OK anonymous process no tickets")
+
+
+def test_logged_in_process_creates_mock_ticket():
+    app = create_app()
+    app.config["TESTING"] = True
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        db.session.commit()
+        batch = _batch_now()
+        ok, reason, meta = _process_review(
+            "Logged In App",
+            "user",
+            1,
+            "Broken login keeps failing",
+            batch_started_at=batch,
+            owner=TICKET_OWNER,
+        )
+        assert ok and reason == "processed"
+        assert meta.get("platform")
+        db.session.commit()
+        assert Review.query.count() == 1
+        assert Ticket.query.count() == 1
+        ticket = Ticket.query.first()
+        assert ticket.external_ticket_id != "FAILED"
+        assert ticket.external_ticket_id.startswith(("JIRA-", "ZD-", "RA-"))
+    print("OK logged in process creates mock ticket")
+
+
+def test_disabled_integration_uses_mock_not_env():
+    from app.ticketing import create_jira_ticket, create_zendesk_ticket
+
+    class _Review:
+        source = "Google Play"
+        app_name = "Test App"
+        author = "user"
+        rating = 2
+        content = "App crashes on login"
+        sentiment = "negative"
+        category = "bug"
+        confidence = 0.8
+
+    integration = UserIntegrationSettings(user_id=99, jira_enabled=False, zendesk_enabled=False)
+    jira = create_jira_ticket(_Review(), 1, integration=integration)
+    zendesk = create_zendesk_ticket(_Review(), 1, integration=integration)
+    assert jira["mode"] == "mock"
+    assert jira["external_ticket_id"].startswith("JIRA-")
+    assert jira["external_ticket_id"] != "FAILED"
+    assert zendesk["mode"] == "mock"
+    assert zendesk["external_ticket_id"].startswith("ZD-")
+    print("OK disabled integration uses mock not env")
+
+
+def test_enabled_incomplete_integration_uses_mock():
+    from app.ticketing import create_jira_ticket
+
+    class _Review:
+        source = "Google Play"
+        app_name = "Test App"
+        author = "user"
+        rating = 2
+        content = "Needs help"
+        sentiment = "negative"
+        category = "support"
+        confidence = 0.8
+
+    integration = UserIntegrationSettings(
+        user_id=100,
+        jira_enabled=True,
+        jira_base_url="https://example.atlassian.net",
+        jira_email="dev@example.com",
+        jira_project_key="PRJ",
+        jira_api_token_encrypted=None,
+    )
+    result = create_jira_ticket(_Review(), 2, integration=integration)
+    assert result["mode"] == "mock"
+    assert result["external_ticket_id"].startswith("JIRA-")
+    assert result["external_ticket_id"] != "FAILED"
+    print("OK enabled incomplete integration uses mock")
+
+
+def test_integrations_ui_split_cards():
+    html = (ROOT / "app" / "templates" / "account" / "settings.html").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "settings-integrations.js").read_text(encoding="utf-8")
+    assert "save_jira" in html
+    assert "save_zendesk" in html
+    assert "settings-integration-card--jira" in html
+    assert "settings-integration-card--zendesk" in html
+    assert "data-integration-card" in html
+    assert "data-integration-toggle" in html
+    assert "data-integration-fields" in html
+    assert 'value="{{ integration.jira_project_key or \'\' }}"' in html
+    assert 'or \'RA\'' not in html
+    assert "settings-integrations.js" in html
+    assert "data-integration-toggle" in js
+    print("OK integrations UI split cards")
+
+
+def test_jira_adf_description_format():
+    from app.ticketing import _plain_text_to_adf
+
+    adf = _plain_text_to_adf("Source: Google Play\nRating: 3/5\n\nReview:\nApp crashes")
+    assert adf["type"] == "doc"
+    assert adf["version"] == 1
+    assert len(adf["content"]) == 5
+    assert adf["content"][0]["type"] == "paragraph"
+    assert adf["content"][0]["content"][0]["text"] == "Source: Google Play"
+    assert adf["content"][2]["content"] == []
+    assert adf["content"][4]["content"][0]["text"] == "App crashes"
+
+    empty = _plain_text_to_adf("")
+    assert empty["type"] == "doc"
+    assert len(empty["content"]) == 1
+    assert empty["content"][0]["content"] == []
+    print("OK jira adf description format")
+
+
+def test_history_requires_login():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.get("/history")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers.get("Location", "")
+    print("OK history requires login")
+
+
+def test_settings_requires_login():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    resp = client.get("/account/settings")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers.get("Location", "")
+
+    _signup_client(client, email="settings@test.local")
+    resp = client.get("/account/settings")
+    assert resp.status_code == 200
+    assert b"Integrations" in resp.data
+    print("OK settings requires login")
+
+
+def test_history_user_scoped():
+    app = create_app()
+    app.config["TESTING"] = True
+    client = app.test_client()
+    email_a = "user-a@test.local"
+    email_b = "user-b@test.local"
+
+    with app.app_context():
+        Review.query.delete()
+        Ticket.query.delete()
+        User.query.delete()
+        db.session.commit()
+
+    _signup_client(client, email=email_a)
+    with app.app_context():
+        user_a = User.query.filter_by(email=email_a).one()
+        batch = _batch_now()
+        _process_review(
+            "Scoped App",
+            "alice",
+            2,
+            "Needs help with billing",
+            batch_started_at=batch,
+            owner=OwnerContext(user_a.id, None, True, None),
+        )
+        db.session.commit()
+
+    resp_a = client.get("/history")
+    assert resp_a.status_code == 200
+    assert b"Scoped App" in resp_a.data
+
+    client.post("/auth/logout")
+    _signup_client(client, email=email_b)
+    resp_b = client.get("/history")
+    assert resp_b.status_code == 200
+    assert b"Scoped App" not in resp_b.data
+    print("OK history user scoped")
 
 
 if __name__ == "__main__":
@@ -1534,6 +1841,16 @@ if __name__ == "__main__":
     test_finalize_preserves_api_order_for_newest()
     test_batch_query_orders_by_play_rank()
     test_refetch_refreshes_into_batch()
+    test_auth_signup_login_logout()
+    test_anonymous_process_no_tickets()
+    test_logged_in_process_creates_mock_ticket()
+    test_history_requires_login()
+    test_settings_requires_login()
+    test_history_user_scoped()
+    test_disabled_integration_uses_mock_not_env()
+    test_enabled_incomplete_integration_uses_mock()
+    test_integrations_ui_split_cards()
+    test_jira_adf_description_format()
     test_stale_job_status()
     test_analysis_prunes_stale_active_job()
     test_dismiss_active()

@@ -28,8 +28,14 @@
           <a href="#how-it-works" class="rb-nav-link">How it works</a>
         </div>
       </nav>
-      <div class="landing-nav-actions">
+      <div class="landing-nav-actions d-flex align-items-center gap-2">
+        {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">History</a>
+        <a href="{{ url_for('account.settings') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Account</a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Sign in</a>
+        <a href="{{ url_for('auth.signup') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Sign up</a>
+        {% endif %}
         <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary btn-sm">Start analysis</a>
       </div>
     </div>
@@ -60,7 +66,11 @@
       <p class="landing-footer-tagline mb-0">AI-driven Google Play review intelligence — Final Year Project</p>
       <div class="landing-footer-links">
         <a href="{{ url_for('main.analysis') }}">Analysis</a>
+        {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}">History</a>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}">Sign in</a>
+        {% endif %}
       </div>
     </div>
   </footer>

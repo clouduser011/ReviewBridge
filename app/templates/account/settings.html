@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Account settings — ReviewBridge{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings-integrations.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<header class="rb-page-header mb-4">
+  <div class="rb-page-header-top">
+    <div>
+      <p class="rb-eyebrow mb-2">Account</p>
+      <h1 class="rb-page-title">Settings</h1>
+      <p class="rb-page-subtitle">Manage your profile, integrations, and account data.</p>
+    </div>
+  </div>
+</header>
+
+<nav class="settings-tabs" aria-label="Settings sections">
+  <a href="{{ url_for('account.settings', tab='profile') }}" class="settings-tab{% if active_tab == 'profile' %} is-active{% endif %}">Profile</a>
+  <a href="{{ url_for('account.settings', tab='integrations') }}" class="settings-tab{% if active_tab == 'integrations' %} is-active{% endif %}">Integrations</a>
+  <a href="{{ url_for('account.settings', tab='danger') }}" class="settings-tab{% if active_tab == 'danger' %} is-active{% endif %}">Danger zone</a>
+</nav>
+
+{% if active_tab == 'profile' %}
+<div class="rb-card">
+  <div class="rb-card-body">
+    <h2 class="h5 mb-3">Profile</h2>
+    <form method="post" action="{{ url_for('account.settings', tab='profile') }}">
+      <input type="hidden" name="form_type" value="profile">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="display_name">Display name</label>
+          <input type="text" class="form-control" id="display_name" name="display_name" value="{{ current_user.display_name }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="email">Email</label>
+          <input type="email" class="form-control" id="email" value="{{ current_user.email }}" disabled>
+          <p class="form-text mb-0">Email cannot be changed.</p>
+        </div>
+        <div class="col-12"><hr class="my-1"></div>
+        <div class="col-md-6">
+          <label class="form-label" for="new_password">New password</label>
+          <input type="password" class="form-control" id="new_password" name="new_password" autocomplete="new-password">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="confirm_password">Confirm new password</label>
+          <input type="password" class="form-control" id="confirm_password" name="confirm_password" autocomplete="new-password">
+          <p class="form-text mb-0">Leave blank to keep your current password.</p>
+        </div>
+      </div>
+      <button type="submit" class="btn rb-btn-primary mt-3">Save profile</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% if active_tab == 'integrations' %}
+<p class="settings-token-hint mb-3">When disabled, ReviewBridge creates demo ticket IDs during analysis. Enable and fill credentials for real Jira/Zendesk tickets.</p>
+
+<div class="settings-integration-card settings-integration-card--jira" data-integration-card>
+  <form method="post" action="{{ url_for('account.settings', tab='integrations') }}" data-integration-panel>
+    <input type="hidden" name="form_type" value="save_jira">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h3>Jira</h3>
+        <p class="text-muted small mb-0">Create issues for bugs and feature requests.</p>
+      </div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="jira_enabled" name="jira_enabled" value="1" data-integration-toggle {% if integration.jira_enabled %}checked{% endif %}>
+        <label class="form-check-label small" for="jira_enabled">Enabled</label>
+      </div>
+    </div>
+    <div class="integration-fields" data-integration-fields {% if not integration.jira_enabled %}hidden{% endif %}>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="jira_base_url">Base URL</label>
+          <input type="url" class="form-control" id="jira_base_url" name="jira_base_url" value="{{ integration.jira_base_url or '' }}" placeholder="https://your-domain.atlassian.net" autocomplete="off">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="jira_email">Email</label>
+          <input type="email" class="form-control" id="jira_email" name="jira_email" value="{{ integration.jira_email or '' }}" autocomplete="off">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="jira_api_token">API token</label>
+          <input type="password" class="form-control" id="jira_api_token" name="jira_api_token" autocomplete="off" placeholder="{% if jira_token_set %}•••••••• (leave blank to keep){% else %}Paste token{% endif %}">
+          {% if jira_token_set %}<p class="settings-token-hint mb-0">A token is saved. Leave blank to keep it.</p>{% endif %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="jira_project_key">Project key</label>
+          <input type="text" class="form-control" id="jira_project_key" name="jira_project_key" value="{{ integration.jira_project_key or '' }}" autocomplete="off">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="jira_issue_type">Issue type</label>
+          <input type="text" class="form-control" id="jira_issue_type" name="jira_issue_type" value="{{ integration.jira_issue_type or '' }}" autocomplete="off">
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button type="submit" class="btn rb-btn-primary">Save Jira</button>
+      </div>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('account.settings', tab='integrations') }}" class="mt-2">
+    <input type="hidden" name="form_type" value="test_jira">
+    <button type="submit" class="btn btn-sm rb-btn-outline" data-integration-test {% if not integration.jira_enabled %}disabled{% endif %}>Test Jira connection</button>
+  </form>
+</div>
+
+<div class="settings-integration-card settings-integration-card--zendesk" data-integration-card>
+  <form method="post" action="{{ url_for('account.settings', tab='integrations') }}" data-integration-panel>
+    <input type="hidden" name="form_type" value="save_zendesk">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+      <div>
+        <h3>Zendesk</h3>
+        <p class="text-muted small mb-0">Create tickets for support and complaints.</p>
+      </div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="zendesk_enabled" name="zendesk_enabled" value="1" data-integration-toggle {% if integration.zendesk_enabled %}checked{% endif %}>
+        <label class="form-check-label small" for="zendesk_enabled">Enabled</label>
+      </div>
+    </div>
+    <div class="integration-fields" data-integration-fields {% if not integration.zendesk_enabled %}hidden{% endif %}>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="zendesk_subdomain">Subdomain</label>
+          <input type="text" class="form-control" id="zendesk_subdomain" name="zendesk_subdomain" value="{{ integration.zendesk_subdomain or '' }}" placeholder="your-subdomain" autocomplete="off">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="zendesk_email">Email</label>
+          <input type="email" class="form-control" id="zendesk_email" name="zendesk_email" value="{{ integration.zendesk_email or '' }}" autocomplete="off">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="zendesk_api_token">API token</label>
+          <input type="password" class="form-control" id="zendesk_api_token" name="zendesk_api_token" autocomplete="off" placeholder="{% if zendesk_token_set %}•••••••• (leave blank to keep){% else %}Paste token{% endif %}">
+          {% if zendesk_token_set %}<p class="settings-token-hint mb-0">A token is saved. Leave blank to keep it.</p>{% endif %}
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 mt-3">
+        <button type="submit" class="btn rb-btn-primary">Save Zendesk</button>
+      </div>
+    </div>
+  </form>
+  <form method="post" action="{{ url_for('account.settings', tab='integrations') }}" class="mt-2">
+    <input type="hidden" name="form_type" value="test_zendesk">
+    <button type="submit" class="btn btn-sm rb-btn-outline" data-integration-test {% if not integration.zendesk_enabled %}disabled{% endif %}>Test Zendesk connection</button>
+  </form>
+</div>
+{% endif %}
+
+{% if active_tab == 'danger' %}
+<div class="settings-danger-zone">
+  <h3>Delete account</h3>
+  <p class="small text-muted">This permanently removes your account, reviews, tickets, logs, and integration settings.</p>
+  <form method="post" action="{{ url_for('account.delete_account') }}" id="deleteAccountForm" class="mt-3">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label" for="confirm_email">Confirm your email</label>
+        <input type="email" class="form-control" id="confirm_email" name="confirm_email" required autocomplete="off" placeholder="{{ current_user.email }}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label" for="password">Password</label>
+        <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-danger mt-3">Delete my account permanently</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

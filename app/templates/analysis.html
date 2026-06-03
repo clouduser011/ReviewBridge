@@ -34,6 +34,16 @@
   </div>
 </header>
 
+{% if not is_authenticated %}
+<div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4" role="status">
+  <span>Sign in to create Jira/Zendesk tickets and save History.</span>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('auth.login', next=request.path) }}" class="btn btn-sm rb-btn-primary">Sign in</a>
+    <a href="{{ url_for('auth.signup', next=request.path) }}" class="btn btn-sm rb-btn-outline">Create account</a>
+  </div>
+</div>
+{% endif %}
+
 <section id="analysis-empty-onboarding" class="rb-card rb-onboarding-card analysis-empty-onboarding mb-4" aria-labelledby="analysis-empty-title">
   <div class="rb-card-body rb-onboarding-body">
     <div class="rb-onboarding-toolbar">
@@ -43,7 +53,11 @@
       </div>
       <div class="rb-onboarding-actions d-flex flex-wrap gap-2">
         <a href="#dataImportCard" class="btn btn-sm rb-btn-primary">Go to data import</a>
+        {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}" class="btn btn-sm rb-btn-outline">View history</a>
+        {% else %}
+        <a href="{{ url_for('auth.login', next=url_for('main.history')) }}" class="btn btn-sm rb-btn-outline">Sign in for history</a>
+        {% endif %}
       </div>
     </div>
     <p class="rb-onboarding-lead text-muted mb-2">Fetch reviews, analyze sentiment, and generate actionable tickets.</p>
@@ -135,10 +149,12 @@
             <input class="form-check-input" type="checkbox" id="toggleAdvancedOptionsSwitch">
             <label class="form-check-label small" for="toggleAdvancedOptionsSwitch">Advanced options</label>
           </div>
+          {% if tickets_enabled %}
           <div class="form-check form-switch">
             <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitch" value="1">
             <label class="form-check-label small" for="skipPositiveTicketsSwitch">Skip tickets for positive reviews</label>
           </div>
+          {% endif %}
         </div>
         <div id="advancedOptionsPanel" class="rb-import-advanced d-none mb-3">
           <div class="row g-3">
@@ -182,10 +198,12 @@
           </label>
           <p class="rb-import-hint mb-0">Columns: author, rating, content</p>
         </div>
+        {% if tickets_enabled %}
         <div class="form-check form-switch mb-3">
           <input type="checkbox" class="form-check-input" id="skipPositiveTicketsSwitchCsv" value="1">
           <label class="form-check-label small" for="skipPositiveTicketsSwitchCsv">Skip tickets for positive reviews</label>
         </div>
+        {% endif %}
         <button type="submit" class="btn rb-btn-primary w-100 w-md-auto" id="btnCsvUpload">Analyze CSV</button>
       </form>
     </div>
@@ -219,7 +237,7 @@
   </div>
 </div>
 
-<div id="analysisPipelineCard" class="analysis-pipeline-card rb-card rb-pipeline-card mb-4 is-idle" data-active-job-id="{{ active_fetch_job_id or '' }}" data-has-review-results="{{ 'true' if has_review_results else 'false' }}" data-pipeline-snapshot='{{ pipeline_snapshot|tojson if pipeline_snapshot else "null" }}'>
+<div id="analysisPipelineCard" class="analysis-pipeline-card rb-card rb-pipeline-card mb-4 is-idle" data-active-job-id="{{ active_fetch_job_id or '' }}" data-has-review-results="{{ 'true' if has_review_results else 'false' }}" data-tickets-enabled="{{ 'true' if tickets_enabled else 'false' }}" data-pipeline-snapshot='{{ pipeline_snapshot|tojson if pipeline_snapshot else "null" }}'>
   <div class="rb-card-body rb-pipeline-body">
     <div class="rb-pipeline-toolbar">
       <img id="pipelineAppIcon" src="https://cdn.simpleicons.org/googleplay/34A853" alt="" class="pipeline-app-icon" onerror="this.style.display='none'">
@@ -262,6 +280,7 @@
           <span class="pipeline-step-desc">Sentiment detection &amp; category classification</span>
         </span>
       </li>
+      {% if tickets_enabled %}
       <li class="pipeline-step is-pending" data-phase="ticketing" title="Jira for bugs/features, Zendesk for support">
         <span class="pipeline-step-icon" aria-hidden="true"></span>
         <span class="pipeline-step-text">
@@ -269,6 +288,7 @@
           <span class="pipeline-step-desc">Jira for bugs/features, Zendesk for support</span>
         </span>
       </li>
+      {% endif %}
       <li class="pipeline-step is-pending" data-phase="finalize" title="Saving analysis results">
         <span class="pipeline-step-icon" aria-hidden="true"></span>
         <span class="pipeline-step-text">
@@ -282,9 +302,11 @@
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Analyzed</span><strong id="statProcessed">0</strong></div>
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Refreshed</span><strong id="statRefreshed">0</strong></div>
       <div class="pipeline-stat-chip"><span class="pipeline-stat-label">Skipped</span><strong id="statSkipped">0</strong></div>
+      {% if tickets_enabled %}
       <div class="pipeline-stat-chip" title="New reviews only; re-fetches do not create more tickets"><span class="pipeline-stat-label">Tickets (new)</span><strong id="statTicketsNew">0</strong></div>
       <div class="pipeline-stat-chip" title="Jira tickets created this run"><span class="pipeline-stat-label">Jira (new)</span><strong id="statJira">0</strong></div>
       <div class="pipeline-stat-chip" title="Zendesk tickets created this run"><span class="pipeline-stat-label">Zendesk (new)</span><strong id="statZendesk">0</strong></div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -334,6 +356,7 @@
     </div>
   </div>
   <div class="col-lg-4">
+    {% if tickets_enabled %}
     <div class="rb-card h-100 tickets-panel-card">
       <div class="rb-card-header tickets-panel-header">
         <div class="tickets-panel-title">
@@ -369,6 +392,20 @@
         </div>
       </div>
     </div>
+    {% else %}
+    <div class="rb-card h-100 tickets-panel-card tickets-panel-locked">
+      <div class="rb-card-header tickets-panel-header">
+        <strong>Tickets</strong>
+      </div>
+      <div class="rb-card-body d-flex flex-column justify-content-center text-center py-4">
+        <p class="text-muted mb-3">Sign in to create Jira/Zendesk tickets from analyzed reviews.</p>
+        <div class="d-flex flex-wrap gap-2 justify-content-center">
+          <a href="{{ url_for('auth.login', next=request.full_path) }}" class="btn btn-sm rb-btn-primary">Sign in</a>
+          <a href="{{ url_for('auth.signup', next=request.full_path) }}" class="btn btn-sm rb-btn-outline">Create account</a>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 

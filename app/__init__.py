@@ -40,6 +40,30 @@ def create_app():
 
     from .datetime_utils import utc_naive_to_local
     from .routes import main_bp
+    from .auth import auth_bp
+    from .account import account_bp
+    from flask_login import LoginManager
+
+    login_manager = LoginManager()
+    login_manager.login_view = "auth.login"
+    login_manager.login_message_category = "info"
+
+    @login_manager.user_loader
+    def load_user(user_id: str):
+        from .models import User
+
+        return db.session.get(User, int(user_id))
+
+    login_manager.init_app(app)
+
+    @app.context_processor
+    def inject_auth_context():
+        from flask_login import current_user
+
+        return {
+            "current_user": current_user,
+            "is_authenticated": current_user.is_authenticated,
+        }
 
     @app.template_filter("review_date_display")
     def review_date_display(dt):
@@ -56,12 +80,15 @@ def create_app():
         return local.strftime("%Y-%m-%d %H:%M")
 
     app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(account_bp)
 
     with app.app_context():
         from . import models
 
         db.create_all()
         _ensure_review_columns()
+        _ensure_auth_columns()
         _ensure_ticket_constraints()
 
     return app
@@ -87,6 +114,37 @@ def _ensure_review_columns():
     with db.engine.begin() as conn:
         for stmt in statements:
             conn.execute(text(stmt))
+
+
+def _ensure_auth_columns():
+    """Add auth / owner columns on existing SQLite DBs."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+    tables = inspector.get_table_names()
+
+    if "review" in tables:
+        existing = {col["name"] for col in inspector.get_columns("review")}
+        statements = []
+        if "user_id" not in existing:
+            statements.append("ALTER TABLE review ADD COLUMN user_id INTEGER")
+        if "owner_session_key" not in existing:
+            statements.append("ALTER TABLE review ADD COLUMN owner_session_key VARCHAR(64)")
+        with db.engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+
+    if "ticket" in tables:
+        existing = {col["name"] for col in inspector.get_columns("ticket")}
+        if "user_id" not in existing:
+            with db.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE ticket ADD COLUMN user_id INTEGER"))
+
+    if "processing_log" in tables:
+        existing = {col["name"] for col in inspector.get_columns("processing_log")}
+        if "user_id" not in existing:
+            with db.engine.begin() as conn:
+                conn.execute(text("ALTER TABLE processing_log ADD COLUMN user_id INTEGER"))
 
 
 def _ensure_ticket_constraints():

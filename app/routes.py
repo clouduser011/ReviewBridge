@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime
 
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, session, url_for
+from flask_login import current_user, login_required
 from sqlalchemy import and_, case, or_
 
 from . import db
@@ -14,6 +15,7 @@ from .analyzer import (
     classify_category,
     find_existing_review,
     review_storage_id,
+    scoped_storage_id,
 )
 from .storage_health import storage_health_report
 from .datetime_utils import (
@@ -36,6 +38,7 @@ from .google_play import (
     search_apps_play,
 )
 from .models import ProcessingLog, Review, Ticket
+from .user_context import OwnerContext, capture_owner_context, owner_context_for_worker
 from .ticketing import (
     choose_ticket_platform,
     create_jira_ticket,
@@ -89,9 +92,15 @@ POPULAR_APPS = [
 POPULAR_APPS_BY_NAME = {item["app_name"]: item for item in POPULAR_APPS}
 
 
-def log_message(message: str, level: str = "info"):
-    db.session.add(ProcessingLog(message=message, level=level))
+def log_message(message: str, level: str = "info", user_id: int | None = None):
+    db.session.add(ProcessingLog(message=message, level=level, user_id=user_id))
     db.session.commit()
+
+
+def _owner_scope_filter(owner: OwnerContext):
+    if owner.user_id:
+        return Review.user_id == owner.user_id
+    return and_(Review.user_id.is_(None), Review.owner_session_key == owner.owner_session_key)
 
 
 def _normalize_batch_dt(value: datetime | None) -> datetime | None:
@@ -130,11 +139,11 @@ def _batch_review_filter(since: datetime):
     )
 
 
-def _batch_reviews_query(since: datetime):
+def _batch_reviews_query(since: datetime, owner: OwnerContext):
     rank_first = case((Review.play_rank.is_(None), 1), else_=0)
     date_fallback = case((Review.reviewed_at.is_(None), 1), else_=0)
     return (
-        Review.query.filter(_batch_review_filter(since))
+        Review.query.filter(_batch_review_filter(since), _owner_scope_filter(owner))
         .order_by(
             rank_first,
             Review.play_rank.asc(),
@@ -190,8 +199,18 @@ def _refresh_existing_review(
     play_review_id: str | None,
     reviewed_at: datetime | None,
     play_rank: int | None,
+    owner: OwnerContext | None = None,
 ) -> None:
-    preferred_id = review_storage_id(app_name, play_review_id, author, raw_text, rating)
+    owner = owner or OwnerContext(None, None, False, None)
+    preferred_id = scoped_storage_id(
+        owner.user_id,
+        owner.owner_session_key,
+        app_name,
+        play_review_id,
+        author,
+        raw_text,
+        rating,
+    )
     existing.app_name = app_name
     existing.author = author
     existing.rating = rating
@@ -213,22 +232,26 @@ def _create_ticket_for_review(
     sentiment: str,
     *,
     skip_positive_tickets: bool = False,
+    owner: OwnerContext | None = None,
 ) -> str | None:
     """Create at most one ticket per review. Returns platform name or None."""
+    if not owner or not owner.allow_tickets:
+        return None
     if review.tickets:
         return None
     if skip_positive_tickets and sentiment == "positive":
         return None
 
     platform = choose_ticket_platform(category)
+    integration = owner.integration
     try:
         ticket_payload = (
-            create_jira_ticket(review, review.id)
+            create_jira_ticket(review, review.id, integration=integration)
             if platform == "Jira"
-            else create_zendesk_ticket(review, review.id)
+            else create_zendesk_ticket(review, review.id, integration=integration)
         )
     except Exception as e:
-        log_message(f"Ticket creation failed for review {review.id}: {e}", "error")
+        log_message(f"Ticket creation failed for review {review.id}: {e}", "error", user_id=owner.user_id)
         ticket_payload = {
             "platform": platform,
             "external_ticket_id": "FAILED",
@@ -239,6 +262,7 @@ def _create_ticket_for_review(
     db.session.add(
         Ticket(
             review_id=review.id,
+            user_id=owner.user_id,
             platform=ticket_payload["platform"],
             external_ticket_id=ticket_payload["external_ticket_id"],
             title=ticket_payload["title"],
@@ -305,18 +329,34 @@ def _process_review(
     reviewed_at: datetime | None = None,
     play_rank: int | None = None,
     skip_positive_tickets: bool = False,
+    owner: OwnerContext | None = None,
 ) -> tuple[bool, str, dict]:
     batch_started_at = _normalize_batch_dt(batch_started_at)  # type: ignore[assignment]
     raw_text = (text or "").strip()
     if not raw_text:
         return False, "empty", {}
 
-    existing = find_existing_review(app_name, play_review_id, author, raw_text, rating)
+    owner = owner or OwnerContext(None, None, False, None)
+    existing = find_existing_review(
+        app_name,
+        play_review_id,
+        author,
+        raw_text,
+        rating,
+        user_id=owner.user_id,
+        owner_session_key=owner.owner_session_key,
+    )
 
     sentiment, confidence = analyze_sentiment(raw_text)
     category = classify_category(raw_text, rating, sentiment)
 
     if existing:
+        existing.last_batch_at = batch_started_at
+        if owner.user_id:
+            existing.user_id = owner.user_id
+            existing.owner_session_key = None
+        elif owner.owner_session_key:
+            existing.owner_session_key = owner.owner_session_key
         _refresh_existing_review(
             existing,
             app_name=app_name,
@@ -330,6 +370,7 @@ def _process_review(
             play_review_id=play_review_id,
             reviewed_at=reviewed_at,
             play_rank=play_rank,
+            owner=owner,
         )
         return True, "refreshed", {
             "platform": None,
@@ -337,11 +378,21 @@ def _process_review(
             "sentiment": sentiment,
         }
 
-    storage_id = review_storage_id(app_name, play_review_id, author, raw_text, rating)
+    storage_id = scoped_storage_id(
+        owner.user_id,
+        owner.owner_session_key,
+        app_name,
+        play_review_id,
+        author,
+        raw_text,
+        rating,
+    )
     review = Review(
         source="Google Play",
         app_name=app_name,
         review_id=storage_id,
+        user_id=owner.user_id,
+        owner_session_key=owner.owner_session_key if not owner.user_id else None,
         author=author,
         rating=rating,
         content=raw_text,
@@ -361,6 +412,7 @@ def _process_review(
         category,
         sentiment,
         skip_positive_tickets=skip_positive_tickets,
+        owner=owner,
     )
     return True, "processed", {
         "platform": platform,
@@ -394,6 +446,7 @@ def _process_reviews_loop(
     app_icon: str = "",
     *,
     skip_positive_tickets: bool = False,
+    owner: OwnerContext | None = None,
 ) -> None:
     total_rows = len(rows)
     processed = 0
@@ -458,6 +511,7 @@ def _process_reviews_loop(
             reviewed_at=reviewed_at,
             play_rank=play_rank,
             skip_positive_tickets=skip_positive_tickets,
+            owner=owner,
         )
         if ok:
             processed += 1
@@ -731,6 +785,7 @@ def home():
 
 @main_bp.route("/analysis")
 def analysis():
+    owner = capture_owner_context()
     since = _analysis_view_since()
     if since is None:
         session.pop("current_app_icon", None)
@@ -745,7 +800,7 @@ def analysis():
         current_app_label = "No dataset loaded"
         current_app_icon = "https://cdn.simpleicons.org/googleplay/34A853"
     else:
-        reviews = _batch_reviews_query(since).all()
+        reviews = _batch_reviews_query(since, owner).all()
         positive_reviews = [r for r in reviews if r.sentiment == "positive"]
         non_positive_reviews = [r for r in reviews if r.sentiment != "positive"]
         app_names = sorted({r.app_name for r in reviews if r.app_name})
@@ -759,18 +814,29 @@ def analysis():
         )
         all_batch_tickets = (
             Ticket.query.join(Review, Ticket.review_id == Review.id)
-            .filter(_batch_review_filter(since))
+            .filter(_batch_review_filter(since), _owner_scope_filter(owner))
             .order_by(Ticket.created_at.desc())
             .all()
         )
-        tickets = all_batch_tickets
-        logs = ProcessingLog.query.filter(ProcessingLog.created_at >= since).order_by(ProcessingLog.created_at.desc()).limit(10).all()
+        tickets = all_batch_tickets if owner.allow_tickets else []
+        if owner.user_id:
+            logs = (
+                ProcessingLog.query.filter(
+                    ProcessingLog.user_id == owner.user_id,
+                    ProcessingLog.created_at >= since,
+                )
+                .order_by(ProcessingLog.created_at.desc())
+                .limit(10)
+                .all()
+            )
+        else:
+            logs = []
 
     total_reviews = len(reviews)
     avg_rating = round(sum([r.rating for r in reviews]) / total_reviews, 2) if total_reviews else 0
     sentiment_counts = Counter([r.sentiment for r in reviews])
     category_counts = Counter([r.category for r in reviews])
-    ticket_counts = Counter([t.platform for t in all_batch_tickets])
+    ticket_counts = Counter([t.platform for t in tickets])
     total = max(1, total_reviews)
     percentages = {
         "positive": round((sentiment_counts.get("positive", 0) / total) * 100, 1) if total_reviews else 0,
@@ -822,8 +888,9 @@ def analysis():
             "complaints": category_counts.get("complaint", 0),
             "jira": ticket_counts.get("Jira", 0),
             "zendesk": ticket_counts.get("Zendesk", 0),
-            "tickets_total": len(all_batch_tickets),
+            "tickets_total": len(tickets),
         },
+        tickets_enabled=owner.allow_tickets,
     )
 
 
@@ -842,16 +909,24 @@ def api_storage_health():
 
 
 @main_bp.route("/history")
+@login_required
 def history():
-    reviews = Review.query.order_by(Review.created_at.desc()).limit(5000).all()
+    user_id = current_user.id
+    reviews = Review.query.filter_by(user_id=user_id).order_by(Review.created_at.desc()).limit(5000).all()
     tickets = (
         db.session.query(Ticket, Review.app_name)
         .join(Review, Ticket.review_id == Review.id)
+        .filter(Review.user_id == user_id)
         .order_by(Ticket.created_at.desc())
         .limit(2000)
         .all()
     )
-    logs = ProcessingLog.query.order_by(ProcessingLog.created_at.desc()).limit(200).all()
+    logs = (
+        ProcessingLog.query.filter_by(user_id=user_id)
+        .order_by(ProcessingLog.created_at.desc())
+        .limit(200)
+        .all()
+    )
 
     grouped = {}
     for review in reviews:
@@ -884,14 +959,19 @@ def history():
 
 
 @main_bp.route("/history/clear", methods=["POST"])
+@login_required
 def clear_history():
+    user_id = current_user.id
     session.pop("active_fetch_job_id", None)
     session.pop("pipeline_snapshot", None)
-    Ticket.query.delete()
-    Review.query.delete()
-    ProcessingLog.query.delete()
+    review_ids = [r.id for r in Review.query.filter_by(user_id=user_id).all()]
+    if review_ids:
+        Ticket.query.filter(Ticket.review_id.in_(review_ids)).delete(synchronize_session=False)
+    Ticket.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    Review.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+    ProcessingLog.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     db.session.commit()
-    log_message("History cleared: all reviews, tickets, and logs removed.", "info")
+    log_message("History cleared: all reviews, tickets, and logs removed.", "info", user_id=user_id)
     flash("History cleared. All saved reviews, tickets, and logs were removed.", "success")
     return redirect(url_for("main.history"))
 
@@ -912,11 +992,12 @@ def clear_dashboard():
 
 @main_bp.route("/export/analysis.csv")
 def export_analysis_csv():
+    owner = capture_owner_context()
     since = _analysis_view_since()
     if since is None:
         rows = []
     else:
-        rows = _batch_reviews_query(since).all()
+        rows = _batch_reviews_query(since, owner).all()
 
     data = _professional_csv_bytes("Analysis Batch Reviews", rows)
     return Response(
@@ -932,8 +1013,14 @@ def export_dashboard_csv():
 
 
 @main_bp.route("/export/history.csv")
+@login_required
 def export_history_csv():
-    rows = Review.query.order_by(Review.created_at.desc()).limit(2000).all()
+    rows = (
+        Review.query.filter_by(user_id=current_user.id)
+        .order_by(Review.created_at.desc())
+        .limit(2000)
+        .all()
+    )
     data = _professional_csv_bytes("History Reviews", rows)
     return Response(
         data,
@@ -944,11 +1031,12 @@ def export_history_csv():
 
 @main_bp.route("/export/analysis.xlsx")
 def export_analysis_xlsx():
+    owner = capture_owner_context()
     since = _analysis_view_since()
     if since is None:
         rows = []
     else:
-        rows = _batch_reviews_query(since).all()
+        rows = _batch_reviews_query(since, owner).all()
     xlsx = _build_professional_xlsx(
         "Analysis Batch Reviews",
         f"Generated UTC {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} · {len(rows)} row(s)",
@@ -973,8 +1061,14 @@ def export_dashboard_xlsx():
 
 
 @main_bp.route("/export/history.xlsx")
+@login_required
 def export_history_xlsx():
-    rows = Review.query.order_by(Review.created_at.desc()).limit(2000).all()
+    rows = (
+        Review.query.filter_by(user_id=current_user.id)
+        .order_by(Review.created_at.desc())
+        .limit(2000)
+        .all()
+    )
     xlsx = _build_professional_xlsx(
         "History Reviews",
         f"Generated UTC {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} · {len(rows)} row(s)",
@@ -1076,8 +1170,12 @@ def _run_fetch_job(
     app_icon: str,
     fetch_all: bool,
     skip_positive_tickets: bool = False,
+    owner_user_id: int | None = None,
+    owner_session_key: str | None = None,
+    owner_allow_tickets: bool = False,
 ):
     with app.app_context():
+        owner = owner_context_for_worker(owner_user_id, owner_session_key, owner_allow_tickets)
         try:
             _set_job(
                 job_id,
@@ -1149,6 +1247,7 @@ def _run_fetch_job(
                     batch_started_at,
                     app_icon,
                     skip_positive_tickets=skip_positive_tickets,
+                    owner=owner,
                 )
             if (_get_job(job_id) or {}).get("status") == "completed":
                 job_done = _get_job(job_id) or {}
@@ -1157,10 +1256,11 @@ def _run_fetch_job(
                     f"{job_done.get('new', 0)} new, {job_done.get('refreshed', 0)} refreshed, "
                     f"{job_done.get('skipped', 0)} skipped.",
                     "info",
+                    user_id=owner.user_id,
                 )
         except Exception as e:
             db.session.rollback()
-            log_message(f"Google Play fetch failed: {e}", "error")
+            log_message(f"Google Play fetch failed: {e}", "error", user_id=owner.user_id)
             _set_job(
                 job_id,
                 status="error",
@@ -1177,8 +1277,12 @@ def _run_csv_job(
     rows: list,
     app_icon: str = "",
     skip_positive_tickets: bool = False,
+    owner_user_id: int | None = None,
+    owner_session_key: str | None = None,
+    owner_allow_tickets: bool = False,
 ):
     with app.app_context():
+        owner = owner_context_for_worker(owner_user_id, owner_session_key, owner_allow_tickets)
         try:
             _set_job(
                 job_id,
@@ -1209,6 +1313,7 @@ def _run_csv_job(
                 batch_started_at,
                 app_icon,
                 skip_positive_tickets=skip_positive_tickets,
+                owner=owner,
             )
             if (_get_job(job_id) or {}).get("status") == "completed":
                 job_done = _get_job(job_id) or {}
@@ -1217,10 +1322,11 @@ def _run_csv_job(
                     f"{job_done.get('new', 0)} new, {job_done.get('refreshed', 0)} refreshed, "
                     f"{job_done.get('skipped', 0)} skipped.",
                     "info",
+                    user_id=owner.user_id,
                 )
         except Exception as e:
             db.session.rollback()
-            log_message(f"CSV upload failed: {e}", "error")
+            log_message(f"CSV upload failed: {e}", "error", user_id=owner.user_id)
             _set_job(
                 job_id,
                 status="error",
@@ -1260,6 +1366,7 @@ def start_csv_upload():
 
     skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
 
+    owner = capture_owner_context()
     job_id = str(uuid.uuid4())
     session["active_fetch_job_id"] = job_id
     session.pop("pipeline_snapshot", None)
@@ -1285,7 +1392,17 @@ def start_csv_upload():
     app = current_app._get_current_object()
     worker = threading.Thread(
         target=_run_csv_job,
-        args=(app, job_id, app_name, rows, app_icon, skip_positive_tickets),
+        args=(
+            app,
+            job_id,
+            app_name,
+            rows,
+            app_icon,
+            skip_positive_tickets,
+            owner.user_id,
+            owner.owner_session_key,
+            owner.allow_tickets,
+        ),
         daemon=True,
     )
     worker.start()
@@ -1306,6 +1423,7 @@ def upload_reviews():
     csv_reader = csv.DictReader(io.StringIO(content))
 
     skip_positive_tickets = _parse_skip_positive_tickets(request.form.get("skip_positive_tickets"))
+    owner = capture_owner_context()
     batch_started_at = _batch_now()
     processed = 0
     skipped = 0
@@ -1322,6 +1440,7 @@ def upload_reviews():
             reviewed_at=parsed["reviewed_at"],
             play_rank=parsed["play_rank"],
             skip_positive_tickets=skip_positive_tickets,
+            owner=owner,
         )
         if ok:
             processed += 1
@@ -1329,7 +1448,7 @@ def upload_reviews():
             skipped += 1
 
     db.session.commit()
-    log_message(f"CSV upload complete: {processed} processed, {skipped} skipped.", "info")
+    log_message(f"CSV upload complete: {processed} processed, {skipped} skipped.", "info", user_id=owner.user_id)
 
     flash(
         f"Processing done. {processed} reviews in batch, {skipped} skipped (invalid only).",
@@ -1351,6 +1470,8 @@ def fetch_from_google_play():
     if not package_name:
         flash("Package name is required. Example: com.whatsapp", "danger")
         return redirect(url_for("main.analysis"))
+
+    owner = capture_owner_context()
 
     try:
         count = _parse_review_count(request.form.get("count"))
@@ -1375,7 +1496,7 @@ def fetch_from_google_play():
                 sort=sort,
             )
     except Exception as e:
-        log_message(f"Google Play fetch failed: {e}", "error")
+        log_message(f"Google Play fetch failed: {e}", "error", user_id=owner.user_id)
         flash(f"Google Play fetch failed: {e}", "danger")
         return redirect(url_for("main.analysis"))
 
@@ -1395,6 +1516,7 @@ def fetch_from_google_play():
             reviewed_at=parsed["reviewed_at"],
             play_rank=parsed["play_rank"],
             skip_positive_tickets=skip_positive_tickets,
+            owner=owner,
         )
         if ok:
             processed += 1
@@ -1405,6 +1527,7 @@ def fetch_from_google_play():
     log_message(
         f"Google Play fetch complete for {package_name}: {processed} processed, {skipped} skipped.",
         "info",
+        user_id=owner.user_id,
     )
 
     flash(
@@ -1433,6 +1556,7 @@ def start_fetch_from_google_play():
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
 
+    owner = capture_owner_context()
     job_id = str(uuid.uuid4())
     session["active_fetch_job_id"] = job_id
     session.pop("pipeline_snapshot", None)
@@ -1469,6 +1593,9 @@ def start_fetch_from_google_play():
             app_icon,
             fetch_all,
             skip_positive_tickets,
+            owner.user_id,
+            owner.owner_session_key,
+            owner.allow_tickets,
         ),
         daemon=True,
     )

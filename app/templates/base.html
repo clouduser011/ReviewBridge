@@ -24,10 +24,31 @@
         <div class="rb-nav-pills">
           <a href="{{ url_for('main.home') }}" class="rb-nav-link{% if request.endpoint == 'main.home' %} is-active{% endif %}">Home</a>
           <a href="{{ url_for('main.analysis') }}" class="rb-nav-link{% if request.endpoint == 'main.analysis' %} is-active{% endif %}">Analysis</a>
+          {% if is_authenticated %}
           <a href="{{ url_for('main.history') }}" class="rb-nav-link{% if request.endpoint == 'main.history' %} is-active{% endif %}">History</a>
+          {% endif %}
         </div>
       </nav>
-      <div class="rb-nav-actions">
+      <div class="rb-nav-actions d-flex align-items-center gap-2">
+        {% if is_authenticated %}
+        <div class="dropdown">
+          <button class="btn btn-sm rb-btn-outline dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            {{ current_user.label }}
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('account.settings') }}">Account settings</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <form action="{{ url_for('auth.logout') }}" method="post" class="m-0">
+                <button type="submit" class="dropdown-item text-danger">Sign out</button>
+              </form>
+            </li>
+          </ul>
+        </div>
+        {% else %}
+        <a href="{{ url_for('auth.login') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign in</a>
+        <a href="{{ url_for('auth.signup') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign up</a>
+        {% endif %}
         <a href="{{ url_for('main.analysis') }}" class="btn btn-sm rb-btn-primary d-none d-sm-inline-flex">Start analysis</a>
       </div>
     </div>
