@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required, logout_user
 
 from . import db
+from .avatar_utils import avatar_disk_path, avatar_exists, delete_avatar_file, save_avatar
 from .crypto_utils import encrypt_secret
 from .models import ProcessingLog, Review, Ticket, User, UserIntegrationSettings
 from .ticketing import _jira_from_integration, _zendesk_from_integration, create_jira_ticket, create_zendesk_ticket
@@ -40,6 +41,20 @@ def _clear_zendesk_fields(integration: UserIntegrationSettings) -> None:
     integration.zendesk_api_token_encrypted = None
 
 
+@account_bp.route("/avatar")
+@login_required
+def avatar():
+    if not current_user.avatar_filename or not avatar_exists(current_user.id):
+        abort(404)
+    path = avatar_disk_path(current_user.id, current_user.avatar_filename)
+    if path is None or not path.is_file():
+        abort(404)
+    response = send_file(path, mimetype="image/webp", conditional=True)
+    response.cache_control.private = True
+    response.cache_control.max_age = 3600
+    return response
+
+
 @account_bp.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():
@@ -62,8 +77,28 @@ def settings():
                     flash("Password confirmation does not match.", "danger")
                     return redirect(url_for("account.settings", tab="profile"))
                 current_user.set_password(new_password)
+
+            avatar_file = request.files.get("avatar")
+            if avatar_file and avatar_file.filename:
+                try:
+                    old_filename = current_user.avatar_filename
+                    current_user.avatar_filename = save_avatar(current_user.id, avatar_file)
+                    if old_filename and old_filename != current_user.avatar_filename:
+                        delete_avatar_file(current_user.id, old_filename)
+                except ValueError as exc:
+                    flash(str(exc), "danger")
+                    return redirect(url_for("account.settings", tab="profile"))
+
             db.session.commit()
             flash("Profile updated.", "success")
+            return redirect(url_for("account.settings", tab="profile"))
+
+        if form_type == "remove_avatar":
+            old_filename = current_user.avatar_filename
+            current_user.avatar_filename = None
+            delete_avatar_file(current_user.id, old_filename)
+            db.session.commit()
+            flash("Profile photo removed.", "success")
             return redirect(url_for("account.settings", tab="profile"))
 
         if form_type == "save_jira":
@@ -128,6 +163,7 @@ def settings():
 
     jira_token_set = bool(integration.jira_api_token_encrypted)
     zendesk_token_set = bool(integration.zendesk_api_token_encrypted)
+    has_avatar = avatar_exists(current_user.id)
 
     return render_template(
         "account/settings.html",
@@ -135,12 +171,18 @@ def settings():
         integration=integration,
         jira_token_set=jira_token_set,
         zendesk_token_set=zendesk_token_set,
+        has_avatar=has_avatar,
     )
 
 
 @account_bp.route("/delete", methods=["POST"])
 @login_required
 def delete_account():
+    phrase = (request.form.get("confirm_phrase") or "").strip().lower()
+    if phrase != "delete":
+        flash("Confirmation phrase was missing or incorrect.", "danger")
+        return redirect(url_for("account.settings", tab="danger"))
+
     password = request.form.get("password") or ""
     confirm = (request.form.get("confirm_email") or "").strip().lower()
     if not current_user.check_password(password):
@@ -151,6 +193,7 @@ def delete_account():
         return redirect(url_for("account.settings", tab="danger"))
 
     user_id = current_user.id
+    avatar_filename = current_user.avatar_filename
     review_ids = [r.id for r in Review.query.filter_by(user_id=user_id).all()]
     if review_ids:
         Ticket.query.filter(Ticket.review_id.in_(review_ids)).delete(synchronize_session=False)
@@ -160,6 +203,7 @@ def delete_account():
     UserIntegrationSettings.query.filter_by(user_id=user_id).delete(synchronize_session=False)
     User.query.filter_by(id=user_id).delete(synchronize_session=False)
     db.session.commit()
+    delete_avatar_file(user_id, avatar_filename)
     logout_user()
     flash("Your account and saved data have been permanently deleted.", "info")
     return redirect(url_for("main.home"))

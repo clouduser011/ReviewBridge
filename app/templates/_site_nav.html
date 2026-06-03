@@ -1,0 +1,50 @@
+{# nav_mode: "landing" | "app" #}
+{# nav_id: "landingNav" | "appNav" #}
+{# nav_inner_class: extra classes on inner wrapper (e.g. container, landing-container) #}
+<header class="rb-nav rb-nav--{{ nav_mode }}" id="{{ nav_id }}" data-nav-mode="{{ nav_mode }}">
+  <div class="{{ nav_inner_class }} rb-nav-inner rb-nav-inner--unified">
+    <a class="rb-brand rb-brand--app" href="{{ url_for('main.home') }}" data-nav-transition="to-landing">
+      <img src="{{ url_for('static', filename='logo-reviewbridge.svg') }}" alt="ReviewBridge" width="28" height="28">
+      <span>ReviewBridge</span>
+    </a>
+    <nav class="rb-nav-primary d-none d-md-flex" aria-label="Primary navigation" data-nav-primary>
+      <div class="rb-nav-pills{% if nav_mode == 'app' %} rb-nav-pills--shell{% endif %}" data-nav-pills>
+        {% if nav_mode == 'landing' %}
+        <span class="rb-nav-pills-indicator" aria-hidden="true"></span>
+        <a href="#top" class="rb-nav-link rb-nav-home-center" data-nav-section="top" data-nav-home>Home</a>
+        <span class="rb-nav-section-links" data-nav-sections>
+          <a href="#features" class="rb-nav-link" data-nav-section="features">Features</a>
+          <a href="#access" class="rb-nav-link" data-nav-section="access">Access</a>
+          <a href="#insights" class="rb-nav-link" data-nav-section="insights">Insights</a>
+          <a href="#how-it-works" class="rb-nav-link" data-nav-section="how-it-works">How it works</a>
+        </span>
+        {% endif %}
+      </div>
+    </nav>
+    <div class="rb-nav-actions d-flex align-items-center gap-2">
+      {% if nav_mode == 'landing' %}
+      <span class="rb-nav-home-ghost btn btn-sm rb-btn-outline rb-nav-action" data-nav-home-target aria-hidden="true">Home</span>
+      {% endif %}
+      {% if nav_mode == 'app' %}
+      <a href="{{ url_for('main.home') }}" class="btn btn-sm rb-btn-outline rb-nav-action rb-nav-home-action d-none d-sm-inline-flex" data-nav-transition="to-landing" data-nav-home>Home</a>
+      <a href="{{ url_for('main.analysis') }}" class="btn btn-sm rb-btn-primary rb-nav-action d-none d-sm-inline-flex{% if request.endpoint == 'main.analysis' %} is-active{% endif %}">Analysis</a>
+      {% if is_authenticated %}
+      <a href="{{ url_for('main.history') }}" class="btn btn-sm rb-btn-outline rb-nav-action d-none d-sm-inline-flex{% if request.endpoint == 'main.history' %} is-active{% endif %}">History</a>
+      {% include '_nav_account_dropdown.html' %}
+      {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign in</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign up</a>
+      {% endif %}
+      {% else %}
+      {% if is_authenticated %}
+      {% include '_nav_account_dropdown.html' %}
+      {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign in</a>
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-sm rb-btn-outline d-none d-sm-inline-flex">Sign up</a>
+      {% endif %}
+      <a href="{{ url_for('main.analysis') }}" class="btn btn-sm rb-btn-primary d-none d-sm-inline-flex" data-nav-transition="to-app">Start analysis</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="rb-nav-flight-layer" aria-hidden="true" data-nav-flight-layer></div>
+</header>

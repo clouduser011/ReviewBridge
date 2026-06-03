@@ -14,46 +14,15 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 </head>
 <body class="landing-body">
-  <header class="landing-nav rb-nav--landing" id="landingNav">
-    <div class="landing-container landing-nav-inner rb-nav-inner rb-nav-inner--landing">
-      <a class="landing-brand" href="{{ url_for('main.home') }}">
-        <img src="{{ url_for('static', filename='logo-reviewbridge.svg') }}" alt="" width="32" height="32">
-        <span>ReviewBridge</span>
-      </a>
-      <nav class="landing-nav-links rb-nav-primary d-none d-md-flex" aria-label="Primary navigation">
-        <div class="rb-nav-pills">
-          <a href="{{ url_for('main.home') }}" class="rb-nav-link{% if request.endpoint == 'main.home' %} is-active{% endif %}">Home</a>
-          <a href="#features" class="rb-nav-link">Features</a>
-          <a href="#insights" class="rb-nav-link">Insights</a>
-          <a href="#how-it-works" class="rb-nav-link">How it works</a>
-        </div>
-      </nav>
-      <div class="landing-nav-actions d-flex align-items-center gap-2">
-        {% if is_authenticated %}
-        <a href="{{ url_for('main.history') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">History</a>
-        <a href="{{ url_for('account.settings') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Account</a>
-        {% else %}
-        <a href="{{ url_for('auth.login') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Sign in</a>
-        <a href="{{ url_for('auth.signup') }}" class="btn btn-landing-ghost btn-sm d-none d-sm-inline-flex">Sign up</a>
-        {% endif %}
-        <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary btn-sm">Start analysis</a>
-      </div>
-    </div>
-  </header>
+  {% set nav_mode = 'landing' %}
+  {% set nav_id = 'landingNav' %}
+  {% set nav_inner_class = 'landing-container' %}
+  {% include '_site_nav.html' %}
 
   <main>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <div class="landing-container pt-3">
-          {% for category, message in messages %}
-            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-              {{ message }}
-              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
+    <div class="landing-container">
+      {% include '_flash_messages.html' %}
+    </div>
     {% block content %}{% endblock %}
   </main>
 
@@ -65,11 +34,12 @@
       </div>
       <p class="landing-footer-tagline mb-0">AI-driven Google Play review intelligence — Final Year Project</p>
       <div class="landing-footer-links">
-        <a href="{{ url_for('main.analysis') }}">Analysis</a>
+        <a href="{{ url_for('main.analysis') }}" data-nav-transition="to-app">Analysis</a>
         {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}">History</a>
         {% else %}
         <a href="{{ url_for('auth.login') }}">Sign in</a>
+        <a href="{{ url_for('auth.signup') }}">Sign up</a>
         {% endif %}
       </div>
     </div>
@@ -77,6 +47,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/nav-scroll.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/nav-transition.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/flash-messages.js') }}"></script>
   <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
 </body>
 </html>

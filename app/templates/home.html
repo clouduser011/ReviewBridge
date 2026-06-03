@@ -9,12 +9,16 @@
         <p class="landing-eyebrow reveal">Google Play review intelligence</p>
         <h1 class="landing-hero-title reveal">Turn Google Play reviews into actionable intelligence</h1>
         <p class="landing-hero-lead reveal">
-          ReviewBridge fetches live reviews, analyzes sentiment and intent, routes issues to Jira or Zendesk,
-          and presents everything in a powerful insight dashboard—built for product teams and academic demos.
+          Fetch live reviews, analyze sentiment and intent, and route issues to Jira or Zendesk.
+          Analysis is free for everyone — sign in to save History, create tickets, and configure your own integrations.
         </p>
         <div class="landing-hero-cta reveal">
           <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary btn-lg">Start analysis</a>
+          {% if is_authenticated %}
           <a href="{{ url_for('main.history') }}" class="btn btn-landing-ghost btn-lg">View history</a>
+          {% else %}
+          <a href="{{ url_for('auth.login', next=url_for('main.history')) }}" class="btn btn-landing-ghost btn-lg">Sign in</a>
+          {% endif %}
         </div>
       </div>
       <div class="col-lg-6">
@@ -43,21 +47,21 @@
       </li>
       <li>
         <span class="landing-trust-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        App search
+      </li>
+      <li>
+        <span class="landing-trust-icon" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg>
         </span>
         AI sentiment analysis
       </li>
       <li>
         <span class="landing-trust-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </span>
-        Auto-ticketing
-      </li>
-      <li>
-        <span class="landing-trust-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        </span>
-        Export reports
+        Per-user integrations
       </li>
     </ul>
   </div>
@@ -68,7 +72,7 @@
     <div class="landing-section-head reveal">
       <p class="landing-eyebrow landing-eyebrow-dark">Key features</p>
       <h2>Everything you need to understand user feedback</h2>
-      <p class="landing-section-lead">From live Google Play imports to automated ticket creation—one workspace for review intelligence.</p>
+      <p class="landing-section-lead">From instant app search to automated ticket creation — one workspace for review intelligence.</p>
     </div>
     <div class="row g-4">
       <div class="col-md-6 col-lg-4 reveal">
@@ -77,7 +81,16 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
           </div>
           <h3>Live Google Play fetch</h3>
-          <p>Import real reviews by package name with store-region control and Play Store order preserved for accurate comparison.</p>
+          <p>Import real reviews by app name or package, with store region and language controls.</p>
+        </article>
+      </div>
+      <div class="col-md-6 col-lg-4 reveal">
+        <article class="landing-feature-card">
+          <div class="landing-feature-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <h3>Instant app search</h3>
+          <p>Search by app name with quick picks and Google Play suggestions when you need a live lookup.</p>
         </article>
       </div>
       <div class="col-md-6 col-lg-4 reveal">
@@ -95,7 +108,7 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
           </div>
           <h3>Smart ticket routing</h3>
-          <p>Bugs and feature requests go to Jira; support and complaints route to Zendesk—with real API or demo mode.</p>
+          <p>Bugs and features go to Jira; support and complaints route to Zendesk. Sign in for real API or demo mock tickets.</p>
         </article>
       </div>
       <div class="col-md-6 col-lg-4 reveal">
@@ -110,37 +123,72 @@
       <div class="col-md-6 col-lg-4 reveal">
         <article class="landing-feature-card">
           <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </div>
-          <h3>Batch integrity</h3>
-          <p>Reviews keep Play Store fetch order within each batch—ideal for instructor verification and side-by-side comparison.</p>
-        </article>
-      </div>
-      <div class="col-md-6 col-lg-4 reveal">
-        <article class="landing-feature-card">
-          <div class="landing-feature-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          </div>
-          <h3>CSV &amp; exports</h3>
-          <p>Upload offline CSV batches or export results to CSV or Excel.</p>
+          <h3>Accounts &amp; History</h3>
+          <p>Save review batches, export CSV or Excel, manage profile and integrations, and revisit past data anytime.</p>
         </article>
       </div>
     </div>
   </div>
 </section>
 
-<section class="landing-section landing-section-alt" id="insights">
+<section class="landing-section landing-section-alt" id="access">
+  <div class="landing-container">
+    <div class="landing-section-head reveal">
+      <p class="landing-eyebrow landing-eyebrow-dark">Access model</p>
+      <h2>Explore free, sign in to save and act</h2>
+      <p class="landing-section-lead">Run analysis without an account. Create one when you need History, ticketing, or your own Jira and Zendesk settings.</p>
+    </div>
+    <div class="row g-4 landing-access-grid">
+      <div class="col-md-6 reveal">
+        <article class="landing-access-card">
+          <h3>Guest</h3>
+          <p class="landing-access-lead">No account required</p>
+          <ul class="landing-access-list">
+            <li>Live Google Play fetch and CSV upload</li>
+            <li>Sentiment charts and review table</li>
+            <li>Batch CSV and Excel export</li>
+            <li>App search and quick picks</li>
+          </ul>
+        </article>
+      </div>
+      <div class="col-md-6 reveal">
+        <article class="landing-access-card landing-access-card--signed-in">
+          <h3>Signed in</h3>
+          <p class="landing-access-lead">Your private workspace</p>
+          <ul class="landing-access-list">
+            <li>Everything guests can do</li>
+            <li>History with all saved reviews and tickets</li>
+            <li>Jira and Zendesk ticketing (real API or mock)</li>
+            <li>Account settings with encrypted integration tokens</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+    <div class="text-center mt-4 reveal">
+      {% if is_authenticated %}
+      <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary">Go to analysis</a>
+      {% else %}
+      <a href="{{ url_for('auth.signup') }}" class="btn btn-landing-primary me-2">Create account</a>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-landing-outline">Sign in</a>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="landing-section" id="insights">
   <div class="landing-container">
     <div class="row align-items-center g-5">
       <div class="col-lg-5 reveal">
-        <p class="landing-eyebrow landing-eyebrow-dark">Insight dashboard</p>
-        <h2>A powerful workspace for review intelligence</h2>
-        <p class="landing-section-lead mb-4">The analysis page brings metrics, charts, tickets, and the full review table into one focused view.</p>
+        <p class="landing-eyebrow landing-eyebrow-dark">Analysis workspace</p>
+        <h2>A focused workspace for review intelligence</h2>
+        <p class="landing-section-lead mb-4">The analysis page brings import, charts, tickets, and the full review table into one view.</p>
         <ul class="landing-insight-list">
           <li>Sentiment donut and category bar charts</li>
-          <li>Live ticket feed (Jira &amp; Zendesk)</li>
-          <li>Sortable review table with dates, sentiment, and category pills</li>
-          <li>Quick picks for popular apps and CSV upload</li>
+          <li>Jira and Zendesk platform ticket strip</li>
+          <li>Filterable review table with sentiment and category pills</li>
+          <li>Google Play and CSV import tabs with quick picks</li>
         </ul>
         <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary">Open analysis workspace</a>
       </div>
@@ -151,7 +199,7 @@
   </div>
 </section>
 
-<section class="landing-section" id="how-it-works">
+<section class="landing-section landing-section-alt" id="how-it-works">
   <div class="landing-container">
     <div class="landing-section-head reveal">
       <p class="landing-eyebrow landing-eyebrow-dark">How it works</p>
@@ -162,21 +210,21 @@
         <div class="landing-step">
           <div class="landing-step-num">1</div>
           <h3>Search your app</h3>
-          <p>Pick from quick picks or search Google Play by name. Set store region to match your device for accurate results.</p>
+          <p>Pick from quick picks or search Google Play by app name. Set store region to match your device.</p>
         </div>
       </div>
       <div class="col-md-4 reveal">
         <div class="landing-step">
           <div class="landing-step-num">2</div>
           <h3>Analyze automatically</h3>
-          <p>Reviews are fetched, deduplicated, and analyzed for sentiment and category. Progress streams in real time.</p>
+          <p>Reviews are fetched, deduplicated, and analyzed for sentiment and category. Progress streams in the pipeline.</p>
         </div>
       </div>
       <div class="col-md-4 reveal">
         <div class="landing-step">
           <div class="landing-step-num">3</div>
           <h3>Act on tickets</h3>
-          <p>Issues are routed to Jira or Zendesk. Explore charts, export reports, and revisit past batches in History.</p>
+          <p>Sign in to route issues to Jira or Zendesk and save batches in History. Configure integrations in Account settings.</p>
         </div>
       </div>
     </div>
@@ -184,12 +232,12 @@
 </section>
 
 {% if popular_apps %}
-<section class="landing-section landing-section-alt landing-apps-teaser">
+<section class="landing-section landing-apps-teaser">
   <div class="landing-container">
     <div class="landing-section-head reveal">
       <p class="landing-eyebrow landing-eyebrow-dark">Popular apps</p>
       <h2>Start with a quick pick</h2>
-      <p class="landing-section-lead">Jump straight into analysis with one click from the workspace.</p>
+      <p class="landing-section-lead">Jump into the analysis workspace and select an app from quick picks beside import.</p>
     </div>
     <div class="landing-apps-grid reveal">
       {% for app in popular_apps %}
@@ -210,7 +258,11 @@
       <p>Open the analysis workspace, fetch live reviews, and see insights in minutes.</p>
       <div class="d-flex flex-wrap gap-3 justify-content-center">
         <a href="{{ url_for('main.analysis') }}" class="btn btn-landing-primary btn-lg">Start analysis</a>
+        {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}" class="btn btn-landing-ghost btn-lg">View history</a>
+        {% else %}
+        <a href="{{ url_for('auth.signup') }}" class="btn btn-landing-ghost btn-lg">Create account</a>
+        {% endif %}
       </div>
     </div>
   </div>

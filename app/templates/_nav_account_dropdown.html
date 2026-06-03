@@ -1,0 +1,25 @@
+{% from '_macros.html' import user_avatar %}
+<div class="dropdown rb-nav-account{% if nav_account_variant %} rb-nav-account--{{ nav_account_variant }}{% endif %}">
+  <button
+    type="button"
+    class="btn rb-nav-avatar-toggle dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-expanded="false"
+    aria-label="Account menu for {{ current_user.label }}"
+    title="{{ current_user.label }}"
+  >
+    {{ user_avatar(current_user, 'sm', has_user_avatar) }}
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end rb-nav-account-menu">
+    <li><h6 class="dropdown-header mb-0 text-truncate">{{ current_user.label }}</h6></li>
+    <li><p class="dropdown-header pt-0 mb-0 small text-muted text-truncate">{{ current_user.email }}</p></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="{{ url_for('account.settings') }}">Account settings</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li>
+      <form action="{{ url_for('auth.logout') }}" method="post" class="m-0">
+        <button type="submit" class="dropdown-item text-danger">Sign out</button>
+      </form>
+    </li>
+  </ul>
+</div>

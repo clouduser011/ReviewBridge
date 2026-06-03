@@ -1,4 +1,4 @@
-{# Landing demo — mirrors Analysis dashboard markup (static data, no canvas/Chart.js) #}
+{# Landing demo — mirrors Analysis workspace markup (static data, no canvas/Chart.js) #}
 {% from '_macros.html' import sentiment_pill, category_pill %}
 {% if variant == 'compact' %}
 <div class="rb-demo-workspace rb-demo-workspace--compact">
@@ -6,101 +6,108 @@
 <div class="rb-demo-workspace rb-demo-workspace--full">
 {% endif %}
 
-{% if variant == 'full' %}
-<div id="dashboardTopMetrics" class="rb-metric-grid mb-4">
-{% else %}
-<div class="rb-metric-grid mb-3">
-{% endif %}
-  <div class="rb-metric-tile"><span class="label">Total reviews</span><strong>100</strong></div>
-  <div class="rb-metric-tile"><span class="label">Overall rating</span><strong>4.2<small class="fs-6 fw-normal opacity-75"> / 5</small></strong></div>
-  <div class="rb-metric-tile"><span class="label">Jira tickets</span><strong>12</strong></div>
-  <div class="rb-metric-tile"><span class="label">Zendesk tickets</span><strong>8</strong></div>
-</div>
-
-{% if variant == 'full' %}
-<div class="row g-4 mb-4">
-  <div class="col-lg-8">
-{% endif %}
-    <div class="rb-overview-shell analysis-overview-card{% if variant == 'full' %} h-100{% endif %}">
-      <div class="rb-overview-metric-band">
-        <div class="rb-insight-metric"><span>Total reviews</span><strong>100</strong></div>
-        <div class="rb-insight-metric"><span>Avg rating</span><strong>4.2 / 5</strong></div>
-        <div class="rb-insight-metric"><span>Positive</span><strong>62%</strong></div>
-      </div>
-      <div class="rb-overview-body">
-        <p class="rb-eyebrow rb-eyebrow-dark mb-3">Charts — WhatsApp</p>
-        <div class="row g-3 align-items-stretch mb-3">
-          <div class="col-md-6">
-            <div class="chart-wrap chart-wrap-donut" role="img" aria-label="Sentiment chart demo: 62% positive, 18% negative, 20% neutral">
-              <svg class="rb-demo-chart-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="50" cy="50" r="38" fill="none" stroke="#e2e8f0" stroke-width="14"/>
-                <circle cx="50" cy="50" r="38" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="148.3 90.5" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
-                <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="14" stroke-dasharray="43.1 195.7" stroke-dashoffset="-148.3" transform="rotate(-90 50 50)"/>
-                <circle cx="50" cy="50" r="38" fill="none" stroke="#94a3b8" stroke-width="14" stroke-dasharray="47.9 191" stroke-dashoffset="-191.4" transform="rotate(-90 50 50)"/>
-              </svg>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="chart-wrap chart-wrap-bar" role="img" aria-label="Category chart demo">
-              <div class="rb-demo-bar-chart">
-                <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 80%; background-color: #f59e0b;"></span><span class="rb-demo-bar-label">Bug</span></div>
-                <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 50%; background-color: #3b82f6;"></span><span class="rb-demo-bar-label">Feature</span></div>
-                <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 40%; background-color: #8b5cf6;"></span><span class="rb-demo-bar-label">Support</span></div>
-                <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 30%; background-color: #ef4444;"></span><span class="rb-demo-bar-label">Complaint</span></div>
-              </div>
-            </div>
-          </div>
+{% macro demo_overview() %}
+<div class="rb-overview-shell analysis-overview-card{% if variant == 'full' %} h-100{% endif %}">
+  <div class="rb-overview-metric-band">
+    <div class="rb-insight-metric"><span>Total reviews</span><strong>100</strong></div>
+    <div class="rb-insight-metric"><span>Avg rating</span><strong>4.2 / 5</strong></div>
+    <div class="rb-insight-metric"><span>Positive</span><strong>62%</strong></div>
+  </div>
+  <div class="rb-overview-body">
+    <p class="rb-eyebrow rb-eyebrow-dark mb-3">Charts — WhatsApp</p>
+    <div class="row g-3 align-items-stretch mb-3">
+      <div class="col-md-6">
+        <div class="chart-wrap chart-wrap-donut" role="img" aria-label="Sentiment chart demo: 62% positive, 18% negative, 20% neutral">
+          <svg class="rb-demo-chart-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#e2e8f0" stroke-width="14"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#22c55e" stroke-width="14" stroke-dasharray="148.3 90.5" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" stroke-width="14" stroke-dasharray="43.1 195.7" stroke-dashoffset="-148.3" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#94a3b8" stroke-width="14" stroke-dasharray="47.9 191" stroke-dashoffset="-191.4" transform="rotate(-90 50 50)"/>
+          </svg>
         </div>
-        <div class="percent-bars-inline">
-          <div class="percent-bar-row">
-            <span class="percent-bar-label">Positive</span>
-            <div class="percent-bar-track"><div class="percent-bar-fill fill-positive" style="width: 62%"></div></div>
-            <span class="percent-bar-value">62%</span>
-          </div>
-          <div class="percent-bar-row">
-            <span class="percent-bar-label">Negative</span>
-            <div class="percent-bar-track"><div class="percent-bar-fill fill-negative" style="width: 18%"></div></div>
-            <span class="percent-bar-value">18%</span>
-          </div>
-          <div class="percent-bar-row">
-            <span class="percent-bar-label">Neutral</span>
-            <div class="percent-bar-track"><div class="percent-bar-fill fill-neutral" style="width: 20%"></div></div>
-            <span class="percent-bar-value">20%</span>
+      </div>
+      <div class="col-md-6">
+        <div class="chart-wrap chart-wrap-bar" role="img" aria-label="Category chart demo">
+          <div class="rb-demo-bar-chart">
+            <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 80%; background-color: #f59e0b;"></span><span class="rb-demo-bar-label">Bug</span></div>
+            <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 50%; background-color: #3b82f6;"></span><span class="rb-demo-bar-label">Feature</span></div>
+            <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 40%; background-color: #8b5cf6;"></span><span class="rb-demo-bar-label">Support</span></div>
+            <div class="rb-demo-bar-col"><span class="rb-demo-bar" style="height: 30%; background-color: #ef4444;"></span><span class="rb-demo-bar-label">Complaint</span></div>
           </div>
         </div>
       </div>
     </div>
+    <div class="percent-bars-inline">
+      <div class="percent-bar-row">
+        <span class="percent-bar-label">Positive</span>
+        <div class="percent-bar-track"><div class="percent-bar-fill fill-positive" style="width: 62%"></div></div>
+        <span class="percent-bar-value">62%</span>
+      </div>
+      <div class="percent-bar-row">
+        <span class="percent-bar-label">Negative</span>
+        <div class="percent-bar-track"><div class="percent-bar-fill fill-negative" style="width: 18%"></div></div>
+        <span class="percent-bar-value">18%</span>
+      </div>
+      <div class="percent-bar-row">
+        <span class="percent-bar-label">Neutral</span>
+        <div class="percent-bar-track"><div class="percent-bar-fill fill-neutral" style="width: 20%"></div></div>
+        <span class="percent-bar-value">20%</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
 {% if variant == 'full' %}
+<div class="row g-4 mb-4">
+  <div class="col-lg-8">
+    {{ demo_overview() }}
   </div>
   <div class="col-lg-4">
     <div class="rb-card h-100 tickets-panel-card">
-      <div class="rb-card-header">
-        <strong>Tickets</strong>
-        <span class="badge rounded-pill text-bg-primary">3</span>
+      <div class="rb-card-header tickets-panel-header">
+        <div class="tickets-panel-title">
+          <strong>Tickets</strong>
+          <span class="badge rounded-pill text-bg-primary">3</span>
+        </div>
+        <div class="rb-ticket-platform-strip" aria-label="Tickets by platform">
+          <div class="rb-ticket-platform-chip" title="Jira tickets in this batch">
+            <span class="rb-ticket-platform-chip-label text-jira">Jira</span>
+            <strong>12</strong>
+          </div>
+          <div class="rb-ticket-platform-chip" title="Zendesk tickets in this batch">
+            <span class="rb-ticket-platform-chip-label text-zendesk">Zendesk</span>
+            <strong>8</strong>
+          </div>
+        </div>
       </div>
-      <ul class="list-group list-group-flush tickets-scroll">
-        <li class="list-group-item ticket-row">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <span class="ticket-platform text-jira">Jira</span>
-            <code class="ticket-id small">RB-1042</code>
-          </div>
-          <div class="ticket-title small text-muted mt-1">Login fails after update on Android 14</div>
-        </li>
-        <li class="list-group-item ticket-row">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <span class="ticket-platform text-zendesk">Zendesk</span>
-            <code class="ticket-id small">ZD-8821</code>
-          </div>
-          <div class="ticket-title small text-muted mt-1">Cannot restore chat backup</div>
-        </li>
-        <li class="list-group-item ticket-row">
-          <div class="d-flex justify-content-between align-items-start gap-2">
-            <span class="ticket-platform text-jira">Jira</span>
-            <code class="ticket-id small">RB-1043</code>
-          </div>
-          <div class="ticket-title small text-muted mt-1">Dark mode contrast on settings screen</div>
-        </li>
-      </ul>
+      <div class="rb-card-body rb-tickets-panel-body">
+        <div class="tickets-list-wrap tickets-scroll">
+          <ul class="list-group list-group-flush mb-0">
+            <li class="list-group-item ticket-row">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <span class="ticket-platform text-jira">Jira</span>
+                <code class="ticket-id small">JIRA-A1B2C3</code>
+              </div>
+              <div class="ticket-title small text-muted mt-1">Login fails after update on Android 14</div>
+            </li>
+            <li class="list-group-item ticket-row">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <span class="ticket-platform text-zendesk">Zendesk</span>
+                <code class="ticket-id small">ZD-X9Y8Z7</code>
+              </div>
+              <div class="ticket-title small text-muted mt-1">Cannot restore chat backup</div>
+            </li>
+            <li class="list-group-item ticket-row">
+              <div class="d-flex justify-content-between align-items-start gap-2">
+                <span class="ticket-platform text-jira">Jira</span>
+                <code class="ticket-id small">JIRA-D4E5F6</code>
+              </div>
+              <div class="ticket-title small text-muted mt-1">Dark mode contrast on settings screen</div>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -153,6 +160,8 @@
     </table>
   </div>
 </div>
+{% else %}
+{{ demo_overview() }}
 {% endif %}
 
 </div>

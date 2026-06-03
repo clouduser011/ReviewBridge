@@ -12,3 +12,13 @@
   {% elif category == 'feature_request' %}<span class="cat-pill cat-feature">{{ category }}</span>
   {% else %}<span class="cat-pill cat-default">{{ category }}</span>{% endif %}
 {%- endmacro %}
+
+{% macro user_avatar(user, size='md', has_avatar=False) -%}
+  <span class="rb-avatar rb-avatar--{{ size }}{% if not has_avatar %} rb-avatar--initials{% endif %}" aria-hidden="true">
+    {% if has_avatar %}
+      <img src="{{ url_for('account.avatar') }}" alt="" width="32" height="32" loading="lazy">
+    {% else %}
+      {{ user.initials }}
+    {% endif %}
+  </span>
+{%- endmacro %}

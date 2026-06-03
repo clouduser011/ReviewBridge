@@ -69,6 +69,11 @@ def _login_client(client, email="pipeline@test.local", password="testpass123"):
     return client
 
 
+def _test_app():
+    """Flask app backed by in-memory SQLite — never touches instance/reviewbridge.db."""
+    return create_app(testing=True)
+
+
 def test_analysis_markup():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
     filter_partial = (ROOT / "app" / "templates" / "_review_filter_toolbar.html").read_text(encoding="utf-8")
@@ -104,6 +109,7 @@ def test_analysis_markup():
         "fetchSortHidden",
         "statRefreshed",
         "rb-page-header",
+        "main.history",
         "data-review-filter-root",
         "rb-analysis-reviews-body",
         "reviewsResultsCard",
@@ -136,39 +142,95 @@ def test_analysis_markup():
     assert 'max="5000"' not in html
     assert ".rb-import-advanced" in theme_css
     assert "margin-bottom: 0.75rem;" in theme_css
+    workspace_actions = html[html.find('class="rb-page-actions"'):html.find('class="rb-page-actions"') + 600]
+    assert "main.history" in workspace_actions
+    assert "is_authenticated" in workspace_actions
+    assert "next=url_for('main.history')" not in workspace_actions
     print("OK analysis markup")
 
 
 def test_app_nav_has_home_link():
+    import re
+
     base_html = (ROOT / "app" / "templates" / "base.html").read_text(encoding="utf-8")
     landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
+    site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
 
-    assert 'class="rb-nav rb-nav--app"' in base_html
-    assert "rb-nav-pills" in base_html
-    assert "rb-nav-link" in base_html
-    nav_block = base_html.split('class="rb-nav-pills"')[1].split("</div>")[0]
-    assert "main.home" in nav_block
-    assert ">Home</a>" in nav_block
-    assert nav_block.index(">Home</a>") < nav_block.index(">Analysis</a>")
-    assert "auth.login" in base_html
-    assert "{% if is_authenticated %}" in base_html
+    assert "_site_nav.html" in base_html
+    assert "nav_mode = 'app'" in base_html
+    assert "nav-transition.js" in base_html
+    assert "_site_nav.html" in landing_base
+    assert "nav_mode = 'landing'" in landing_base
+    assert "nav-transition.js" in landing_base
 
-    assert "analysis.js" not in base_html
-    assert "rb-nav-inner--landing" in landing_base
-    landing_pills = landing_base.split('class="rb-nav-pills"')[1].split("</div>")[0]
-    assert "main.home" in landing_pills
-    assert ">Home</a>" in landing_pills
-    assert "main.analysis" not in landing_pills
-    assert "main.history" not in landing_pills
-    assert ">Analysis</a>" not in landing_pills
-    assert ">History</a>" not in landing_pills
+    pills_landing = site_nav.split("{% if nav_mode == 'landing' %}")[1].split("{% endif %}")[0]
+    actions_section = site_nav.split("rb-nav-actions")[1]
+    app_match = re.search(
+        r"\{% if nav_mode == 'app' %\}(.*?)\n      \{% endif %\}\n      \{% else %\}",
+        actions_section,
+        re.DOTALL,
+    )
+    assert app_match, "app nav actions block not found"
+    app_actions = app_match.group(1)
+    landing_match = re.search(
+        r"\{% else %\}\n      \{% if is_authenticated %\}(.*?)\n      \{% endif %\}\n    </div>",
+        actions_section,
+        re.DOTALL,
+    )
+    assert landing_match, "landing nav actions block not found"
+    landing_actions = landing_match.group(1)
 
-    landing_actions = landing_base.split("landing-nav-actions")[1].split("</div>")[0]
+    assert "rb-nav-pills--shell" in site_nav
+    assert "rb-nav-home-action" in app_actions
+    assert "main.home" in app_actions
+    assert ">Home</a>" in app_actions
+    assert "data-nav-transition=\"to-landing\"" in app_actions
+    assert "main.analysis" in app_actions
+    assert ">Analysis</a>" in app_actions
+    assert "rb-nav-action" in app_actions
+    assert ">Start analysis</a>" not in app_actions
+    assert "auth.login" in app_actions
+    assert "{% if is_authenticated %}" in app_actions
+    assert "main.home" not in pills_landing
+
+    assert 'href="#top"' in pills_landing
+    assert 'data-nav-section="top"' in pills_landing
+    assert 'data-nav-section="features"' in pills_landing
+    assert "rb-nav-pills-indicator" in pills_landing
+    assert "rb-nav-section-links" in pills_landing
+    assert "data-nav-sections" in pills_landing
+    assert "rb-nav-home-ghost" in site_nav
+    assert "data-nav-home-target" in site_nav
+    assert "rb-nav-flight-layer" in site_nav
+    assert ">Home</a>" in pills_landing
+    assert "data-nav-transition=\"to-app\"" in landing_actions
     assert "main.analysis" in landing_actions
+    assert ">Start analysis</a>" in landing_actions
+    assert "main.history" not in landing_actions
     assert "auth.login" in landing_actions
     assert "auth.signup" in landing_actions
-    assert "{% if is_authenticated %}" in landing_actions
     print("OK app nav has home link")
+
+
+def test_flash_messages_shared():
+    flash_partial = (ROOT / "app" / "templates" / "_flash_messages.html").read_text(encoding="utf-8")
+    base_html = (ROOT / "app" / "templates" / "base.html").read_text(encoding="utf-8")
+    landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
+    flash_js = (ROOT / "app" / "static" / "js" / "flash-messages.js").read_text(encoding="utf-8")
+    theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+
+    assert "data-flash-root" in flash_partial
+    assert "js-alert-auto-hide" in flash_partial
+    assert "data-auto-hide-ms" in flash_partial
+    assert "_flash_messages.html" in base_html
+    assert "_flash_messages.html" in landing_base
+    assert "flash-messages.js" in base_html
+    assert "flash-messages.js" in landing_base
+    assert "closed.bs.alert" in flash_js
+    assert "js-alert-auto-hide" in flash_js
+    assert "landing-container pt-3" not in landing_base
+    assert ".rb-flash-messages" in theme_css
+    print("OK flash messages shared")
 
 
 def test_sticky_nav_scroll_offset_css():
@@ -235,36 +297,47 @@ def test_dead_css_removed():
 def test_landing_nav_modern_theme():
     theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
     landing_css = (ROOT / "app" / "static" / "css" / "landing.css").read_text(encoding="utf-8")
+    landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
+    site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
 
-    for token in (
-        "--rb-nav-landing-shell-bg:",
-        "--rb-nav-landing-aurora:",
-        "--rb-nav-landing-active-gradient:",
-        "--rb-nav-landing-capsule-offset:",
-    ):
-        assert token in theme_css, f"missing landing nav token: {token}"
+    assert "--rb-nav-landing-capsule-offset:" in theme_css
+    assert "var(--rb-sticky-nav-offset)" in theme_css.split("--rb-nav-landing-capsule-offset:")[1].split(";")[0]
+    assert "--rb-nav-link-color:" in theme_css
+    assert "--rb-nav-pill-bg:" in theme_css
 
-    landing_nav_block = theme_css.split(".rb-nav--landing {")[1].split(".rb-nav--landing > .landing-container")[0]
-    assert "position: fixed" in landing_nav_block
-    assert "background: transparent" in landing_nav_block
-    assert "var(--rb-nav-landing-bg)" not in landing_nav_block
+    assert ".rb-nav.rb-nav--landing" in theme_css
+    assert "background: rgba(255, 255, 255, 0.82)" in theme_css
 
-    shell_block = theme_css.split(".rb-nav--landing > .landing-container {")[1].split(
-        ".rb-nav--landing > .landing-container::after"
-    )[0]
-    assert "backdrop-filter: blur(20px)" in shell_block
-    assert "border-radius: 16px" in shell_block
-    assert "var(--rb-nav-landing-shell-bg)" in shell_block
+    shared_nav_block = theme_css.split(".rb-nav.rb-nav--app,")[1].split("}")[0]
+    assert "position: sticky" in shared_nav_block
 
-    assert "var(--rb-nav-landing-aurora)" in theme_css
-    assert ".rb-nav--landing > .landing-container::after" in theme_css
+    assert ".rb-nav-inner--unified" in theme_css
+    assert "rb-nav-inner--unified" in site_nav
+    assert "_site_nav.html" in landing_base
+    assert "rb-nav-section-links" in theme_css
+    assert "--rb-nav-pills-expanded-w" in theme_css
+    assert "is-nav-leaving-landing" in theme_css
+    assert "is-nav-entering-landing" in theme_css
+    assert "is-nav-entering-app" in theme_css
+    assert "rb-nav-flight-layer" in theme_css
 
     active_block = theme_css.split(".rb-nav--landing .rb-nav-link.is-active {")[1].split("}")[0]
-    assert "var(--rb-nav-landing-active-gradient)" in active_block
-    assert "var(--rb-nav-landing-active-glow)" in active_block
+    assert "color: var(--rb-nav-link-active)" in active_block
+    assert "background: transparent" in active_block
+
+    link_block = theme_css.split("\n.rb-nav-link {")[1].split("}")[0]
+    assert "color: var(--rb-nav-link-color)" in link_block
+    assert "0.9375rem" in link_block
+
+    indicator_block = theme_css.split(".rb-nav--landing .rb-nav-pills-indicator {")[1].split("}")[0]
+    assert "background: #fff" in indicator_block
+    assert "var(--rb-nav-active-shadow)" in indicator_block
+    assert "translateX(var(--nav-indicator-x" in indicator_block
 
     assert "var(--rb-nav-landing-capsule-offset)" in landing_css
-    assert "padding: calc(var(--rb-nav-landing-capsule-offset) + 4rem)" in landing_css
+    assert "calc(var(--rb-sticky-nav-offset) + 3rem)" in landing_css
+    assert "#features," in landing_css
+    assert "scroll-margin-top: var(--rb-nav-landing-capsule-offset)" in landing_css
     print("OK landing nav modern theme")
 
 
@@ -300,7 +373,7 @@ def test_export_download_options():
     assert "reportlab" not in requirements.lower()
     assert "pdf for presentations" not in home_html.lower()
 
-    app = create_app()
+    app = _test_app()
     with app.app_context():
         client = app.test_client()
         assert client.get("/export/dashboard.pdf").status_code == 404
@@ -315,20 +388,63 @@ def test_export_download_options():
 
 def test_nav_scroll_shared_js():
     nav_js = (ROOT / "app" / "static" / "js" / "nav-scroll.js").read_text(encoding="utf-8")
+    nav_transition_js = (ROOT / "app" / "static" / "js" / "nav-transition.js").read_text(encoding="utf-8")
     base_html = (ROOT / "app" / "templates" / "base.html").read_text(encoding="utf-8")
     landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
     landing_js = (ROOT / "app" / "static" / "js" / "landing.js").read_text(encoding="utf-8")
+    site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
 
     assert "function initNavScrolled" in nav_js
+    assert "function initLandingNavScrollSpy" in nav_js
+    assert "updateNavPillsIndicator" in nav_js
     assert "nav-scroll.js" in base_html
     assert 'initNavScrolled("appNav")' in base_html
     assert "nav-scroll.js" in landing_base
-    assert 'initNavScrolled("landingNav")' in landing_js
+    assert "nav-transition.js" in base_html
+    assert "nav-transition.js" in landing_base
+    assert "initNavTransition" in nav_transition_js
+    assert "data-nav-transition" in nav_transition_js
+    assert "is-nav-leaving-landing" in nav_transition_js
+    assert "is-nav-entering-landing" in nav_transition_js
+    assert "data-nav-expand-pending" in nav_transition_js
+    assert "data-nav-expand-pending" in landing_js
+    assert 'initLandingNavScrollSpy("landingNav")' in landing_js
+    assert "data-nav-pills" in site_nav
+    assert "data-nav-transition" in site_nav
     print("OK nav scroll shared JS")
 
 
+def test_nav_transition_assets():
+    theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
+    nav_transition_js = (ROOT / "app" / "static" / "js" / "nav-transition.js").read_text(encoding="utf-8")
+    site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
+
+    assert (ROOT / "app" / "templates" / "_site_nav.html").is_file()
+    assert "rb-nav-flight-layer" in site_nav
+    assert "data-nav-flight-layer" in site_nav
+    assert "rb-nav-home-ghost" in site_nav
+    assert "data-nav-home-target" in site_nav
+    assert "data-nav-transition=\"to-app\"" in site_nav
+    assert "data-nav-transition=\"to-landing\"" in site_nav
+    assert "rb-nav-home-action" in site_nav
+    assert "rb-nav-section-links" in site_nav
+    assert "data-nav-sections" in site_nav
+    assert "--rb-nav-pills-expanded-w" in theme_css
+    assert "rb-nav-flight" in theme_css
+    assert "is-nav-leaving-landing" in theme_css
+    assert "is-nav-entering-app" in theme_css
+    assert "prefers-reduced-motion: reduce" in theme_css
+    assert "createFlightClone" in nav_transition_js
+    assert "animateFlight" in nav_transition_js
+    assert "measureNavMetrics" in nav_transition_js
+    assert "is-nav-leaving-landing" in nav_transition_js
+    assert "is-nav-entering-landing" in nav_transition_js
+    assert "is-nav-entering-app" in nav_transition_js
+    print("OK nav transition assets")
+
+
 def test_history_page_no_dashboard_charts():
-    app = create_app()
+    app = _test_app()
     with app.app_context():
         client = app.test_client()
         resp = client.get("/history")
@@ -379,7 +495,7 @@ def test_history_scrollable_layout():
     filter_js = (ROOT / "app" / "static" / "js" / "review-filter.js").read_text(encoding="utf-8")
     assert "mountReviewTableFilter" in filter_js
 
-    app = create_app()
+    app = _test_app()
     with app.app_context():
         client = app.test_client()
         _signup_client(client, email="history-scroll@test.local")
@@ -392,7 +508,7 @@ def test_history_scrollable_layout():
 
 
 def test_storage_health_endpoint():
-    app = create_app()
+    app = _test_app()
     with app.app_context():
         Review.query.delete()
         Ticket.query.delete()
@@ -407,8 +523,7 @@ def test_storage_health_endpoint():
 
 
 def test_hash_then_play_single_review_single_ticket():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -459,8 +574,7 @@ def test_hash_then_play_single_review_single_ticket():
 
 
 def test_skip_positive_tickets_when_enabled():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -487,8 +601,7 @@ def test_skip_positive_tickets_when_enabled():
 
 
 def test_skip_positive_tickets_default_off():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -581,8 +694,7 @@ def test_merge_and_rank_suggestions_local_first():
 
 
 def test_app_catalog_status_endpoint():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     res = client.get("/api/app-catalog/status")
     assert res.status_code == 200
@@ -662,8 +774,7 @@ def test_app_suggestions_typed_search():
         print("SKIP app suggestions typed search (catalog not built)")
         return
 
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/api/app-suggestions?q=whatsapp&limit=10")
@@ -693,8 +804,7 @@ def test_app_suggestions_local_only_endpoint():
         print("SKIP app suggestions local_only endpoint (catalog not built)")
         return
 
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/api/app-suggestions?q=whatsapp&limit=2&local_only=1")
@@ -717,8 +827,7 @@ def test_app_suggestions_local_only_endpoint():
 
 
 def test_app_suggestions_play_only_endpoint():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/api/app-suggestions?q=whatsapp&limit=5&play_only=1")
@@ -754,8 +863,7 @@ def test_resolve_search_countries_pk():
 
 
 def test_app_suggestions_play_only_pk_smoke():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     try:
@@ -874,8 +982,7 @@ def test_quick_picks_hover_css():
 
 
 def test_refresh_does_not_create_second_ticket():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -959,6 +1066,12 @@ def test_parse_review_count_no_upper_cap():
 def test_home_page_loads():
     home_html = (ROOT / "app" / "templates" / "home.html").read_text(encoding="utf-8")
     assert "_rb_demo_workspace.html" in home_html
+    assert 'id="access"' in home_html
+    assert "Sign in" in home_html
+    assert "Sign in for history" not in home_html
+    assert "App search" in home_html
+    assert "6200+" not in home_html
+    assert "landing-access-card" in home_html
     assert "_rb_demo_insight.html" not in home_html
     assert "_rb_demo_dashboard.html" not in home_html
     assert "variant='compact'" in home_html or 'variant="compact"' in home_html
@@ -968,8 +1081,7 @@ def test_home_page_loads():
     landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
     assert "chart.js" not in landing_base.lower()
 
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/")
@@ -978,7 +1090,7 @@ def test_home_page_loads():
     assert 'href="/analysis"' in html or "/analysis" in html
     assert "Start analysis" in html
     assert "landing-hero-title" in html
-    assert "rb-metric-grid" in html
+    assert "rb-demo-pipeline" not in html
     assert "rb-overview-shell" in html
     assert "percent-bars-inline" in html
     assert "sent-pill" in html
@@ -1000,6 +1112,11 @@ def test_home_demo_workspace_markup():
     assert "variant == 'full'" in workspace
     assert "rb-demo-workspace--compact" in workspace
     assert "rb-demo-workspace--full" in workspace
+    assert "rb-demo-pipeline" not in workspace
+    assert "rb-ticket-platform-strip" in workspace
+    assert "JIRA-A1B2C3" in workspace
+    assert "dashboardTopMetrics" not in workspace
+    assert "rb-metric-grid" not in workspace
     assert "rb-demo-chart-svg" in workspace
     assert "rb-demo-bar-chart" in workspace
     assert "tickets-panel-card" in workspace
@@ -1018,12 +1135,35 @@ def test_home_demo_workspace_markup():
     landing_css = (ROOT / "app" / "static" / "css" / "landing.css").read_text(encoding="utf-8")
     assert ".landing-preview," in landing_css or ".landing-preview" in landing_css
     assert "opacity: 1 !important" in landing_css
+    assert "rb-demo-pipeline" not in landing_css
+    assert "max-width: 1320px" in landing_css
+    assert ".landing-access-card" in landing_css
     print("OK home demo workspace markup")
 
 
+def test_analysis_empty_onboarding_copy():
+    analysis_html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
+    assert "Free to explore" in analysis_html
+    assert "Sign in for history" not in analysis_html
+    assert "Go to data import" not in analysis_html
+    assert "rb-onboarding-actions" not in analysis_html
+    assert "platform strip" in analysis_html
+    assert "Learn more on the home page" not in analysis_html
+    assert "local catalog" not in analysis_html
+    assert "Search Google Play or use a quick pick" in analysis_html
+
+    app = _test_app()
+    client = app.test_client()
+    res = client.get("/analysis")
+    assert res.status_code == 200
+    html = res.get_data(as_text=True)
+    assert "Free to explore" in html
+    assert "filterable reviews" in html.lower() or "platform strip" in html.lower()
+    print("OK analysis empty onboarding copy")
+
+
 def test_analysis_empty_shows_guided_onboarding():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/analysis")
@@ -1044,8 +1184,7 @@ def test_analysis_empty_shows_guided_onboarding():
 
 
 def test_clean_no_job_shows_pipeline():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/analysis")
@@ -1066,8 +1205,7 @@ def test_clean_no_job_shows_pipeline():
 
 
 def test_clean_clears_stale_snapshot():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     with client.session_transaction() as sess:
@@ -1089,8 +1227,7 @@ def test_clean_clears_stale_snapshot():
 
 
 def test_clear_analysis_clears_pipeline_snapshot():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     with client.session_transaction() as sess:
@@ -1130,8 +1267,7 @@ def test_play_fetch_helpers():
 
 
 def test_stale_job_status():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     res = client.get("/fetch/status/00000000-0000-0000-0000-000000000099")
@@ -1143,8 +1279,7 @@ def test_stale_job_status():
 
 
 def test_analysis_prunes_stale_active_job():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     stale_id = "00000000-0000-0000-0000-000000000099"
 
@@ -1162,8 +1297,7 @@ def test_analysis_prunes_stale_active_job():
 
 
 def test_dismiss_active():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
 
     with client.session_transaction() as sess:
@@ -1181,8 +1315,7 @@ def test_dismiss_active():
 
 
 def test_csv_job_flow():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     _signup_client(client, email="csv-job@test.local")
 
@@ -1234,8 +1367,7 @@ def test_csv_job_flow():
 
 
 def test_batch_with_snapshot_keeps_pipeline_visible():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     email = "batch-snapshot@test.local"
     _signup_client(client, email=email)
@@ -1361,8 +1493,7 @@ def test_normalize_play_review_at_local_to_utc():
 
 
 def test_csv_upload_passes_reviewed_at():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1400,8 +1531,7 @@ def test_csv_upload_passes_reviewed_at():
 
 
 def test_reviewed_at_updated_on_refresh():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1458,8 +1588,7 @@ def test_finalize_preserves_api_order_for_newest():
 
 
 def test_batch_query_orders_by_play_rank():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1486,8 +1615,7 @@ def test_batch_query_orders_by_play_rank():
 
 
 def test_refetch_refreshes_into_batch():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1540,8 +1668,7 @@ def test_refetch_refreshes_into_batch():
 
 
 def test_auth_signup_login_logout():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     email = "auth-flow@test.local"
     password = "testpass123"
@@ -1576,8 +1703,7 @@ def test_auth_signup_login_logout():
 
 
 def test_anonymous_process_no_tickets():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1604,8 +1730,7 @@ def test_anonymous_process_no_tickets():
 
 
 def test_logged_in_process_creates_mock_ticket():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
 
     with app.app_context():
         Review.query.delete()
@@ -1719,9 +1844,67 @@ def test_jira_adf_description_format():
     print("OK jira adf description format")
 
 
+def test_user_initials_property():
+    user = User(email="a@b.com", display_name="Jane Doe", password_hash="x")
+    assert user.initials == "JD"
+    user.display_name = "Alice"
+    assert user.initials == "AL"
+    user.display_name = ""
+    user.email = "solo@example.com"
+    assert user.initials == "SO"
+    print("OK user initials property")
+
+
+def test_avatar_nav_markup():
+    base_html = (ROOT / "app" / "templates" / "base.html").read_text(encoding="utf-8")
+    landing_html = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
+    site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
+    dropdown_partial = (ROOT / "app" / "templates" / "_nav_account_dropdown.html").read_text(encoding="utf-8")
+    macros_html = (ROOT / "app" / "templates" / "_macros.html").read_text(encoding="utf-8")
+    style_css = (ROOT / "app" / "static" / "css" / "style.css").read_text(encoding="utf-8")
+
+    assert "_site_nav.html" in base_html
+    assert "_site_nav.html" in landing_html
+    assert "_nav_account_dropdown.html" in site_nav
+    assert "rb-nav-avatar-link" not in base_html
+    assert "rb-nav-avatar-link" not in landing_html
+    assert "rb-nav-avatar-link" not in site_nav
+    assert "rb-nav-avatar-toggle" in dropdown_partial
+    assert dropdown_partial.count('data-bs-toggle="dropdown"') == 1
+    assert "current_user.label" in dropdown_partial
+    assert 'title="{{ current_user.label }}"' in dropdown_partial
+    assert 'aria-label="Account menu for {{ current_user.label }}"' in dropdown_partial
+    assert "current_user.email" in dropdown_partial
+    assert "account.settings" in dropdown_partial
+    assert "auth.logout" in dropdown_partial
+    assert "user_avatar" in dropdown_partial
+    assert "account.avatar" in macros_html
+    assert ".rb-nav-avatar-toggle" in style_css
+    assert ".rb-avatar" in style_css
+    print("OK avatar nav markup")
+
+
+def test_settings_profile_avatar_markup():
+    html = (ROOT / "app" / "templates" / "account" / "settings.html").read_text(encoding="utf-8")
+    assert 'enctype="multipart/form-data"' in html
+    assert 'name="avatar"' in html
+    assert "remove_avatar" in html
+    assert "profile-avatar-row" in html
+    assert "user_avatar" in html
+    print("OK settings profile avatar markup")
+
+
+def test_avatar_route_requires_login():
+    app = _test_app()
+    client = app.test_client()
+    resp = client.get("/account/avatar")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers.get("Location", "")
+    print("OK avatar route requires login")
+
+
 def test_history_requires_login():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     resp = client.get("/history")
     assert resp.status_code == 302
@@ -1730,8 +1913,7 @@ def test_history_requires_login():
 
 
 def test_settings_requires_login():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     resp = client.get("/account/settings")
     assert resp.status_code == 302
@@ -1744,17 +1926,66 @@ def test_settings_requires_login():
     print("OK settings requires login")
 
 
+def test_delete_account_modal_markup():
+    html = (ROOT / "app" / "templates" / "account" / "settings.html").read_text(encoding="utf-8")
+    js = (ROOT / "app" / "static" / "js" / "settings-delete-account.js").read_text(encoding="utf-8")
+    css = (ROOT / "app" / "static" / "css" / "auth.css").read_text(encoding="utf-8")
+
+    assert "deleteAccountModal" in html
+    assert "deletePhraseInput" in html
+    open_btn = html.split('id="deleteAccountOpen"')[0][-80:] + 'id="deleteAccountOpen"' + html.split('id="deleteAccountOpen"')[1][:120]
+    assert 'type="button"' in open_btn
+    assert "deleteAccountOpen" in open_btn
+    assert "settings-delete-account.js" in html
+    assert "confirm_phrase" in html
+    assert "account.delete_account" in html
+    assert 'name="confirm_email"' in html
+    assert 'name="password"' in html
+    assert "deleteAccountSubmit" in html
+    assert "rb-delete-modal" in html
+    assert "initDeleteAccountModal" in js
+    assert 'PHRASE = "delete"' in js or 'PHRASE = \"delete\"' in js
+    assert ".rb-delete-modal" in css
+    print("OK delete account modal markup")
+
+
+def test_delete_account_requires_confirm_phrase():
+    app = _test_app()
+    client = app.test_client()
+    email = "delete-guard@test.local"
+    password = "testpass123"
+    _signup_client(client, email=email, password=password)
+
+    resp = client.post(
+        "/account/delete",
+        data={
+            "confirm_email": email,
+            "password": password,
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"Confirmation phrase was missing or incorrect" in resp.data
+
+    with app.app_context():
+        assert User.query.filter_by(email=email).first() is not None
+    print("OK delete account requires confirm phrase")
+
+
 def test_history_user_scoped():
-    app = create_app()
-    app.config["TESTING"] = True
+    app = _test_app()
     client = app.test_client()
     email_a = "user-a@test.local"
     email_b = "user-b@test.local"
 
     with app.app_context():
-        Review.query.delete()
-        Ticket.query.delete()
-        User.query.delete()
+        for email in (email_a, email_b):
+            user = User.query.filter_by(email=email).first()
+            if not user:
+                continue
+            Review.query.filter_by(user_id=user.id).delete()
+            Ticket.query.filter_by(user_id=user.id).delete()
+            db.session.delete(user)
         db.session.commit()
 
     _signup_client(client, email=email_a)
@@ -1783,9 +2014,157 @@ def test_history_user_scoped():
     print("OK history user scoped")
 
 
+def test_idle_session_expires():
+    from datetime import datetime, timezone
+
+    from app.session_idle import LAST_ACTIVITY_KEY
+
+    app = _test_app()
+    app.config["SESSION_IDLE_TIMEOUT_MINUTES"] = 30
+    client = app.test_client()
+    _signup_client(client, email="idle-expire@test.local")
+
+    with client.session_transaction() as sess:
+        sess[LAST_ACTIVITY_KEY] = datetime.now(timezone.utc).timestamp() - 3600
+
+    resp = client.get("/history")
+    assert resp.status_code == 302
+    assert "/auth/login" in resp.headers.get("Location", "")
+
+    _signup_client(client, email="idle-expire2@test.local")
+    resp = client.get("/account/settings")
+    assert resp.status_code == 200
+    print("OK idle session expires")
+
+
+def test_idle_session_touch_keeps_login():
+    from datetime import datetime, timezone
+
+    from app.session_idle import LAST_ACTIVITY_KEY
+
+    app = _test_app()
+    client = app.test_client()
+    _signup_client(client, email="idle-touch@test.local")
+
+    with client.session_transaction() as sess:
+        sess[LAST_ACTIVITY_KEY] = datetime.now(timezone.utc).timestamp()
+
+    resp = client.get("/history")
+    assert resp.status_code == 200
+    print("OK idle session touch keeps login")
+
+
+def test_idle_session_fetch_returns_401_json():
+    from datetime import datetime, timezone
+
+    from app.session_idle import LAST_ACTIVITY_KEY
+
+    app = _test_app()
+    client = app.test_client()
+    _signup_client(client, email="idle-fetch@test.local")
+
+    with client.session_transaction() as sess:
+        sess[LAST_ACTIVITY_KEY] = datetime.now(timezone.utc).timestamp() - 3600
+
+    resp = client.get("/fetch/status/nonexistent-job")
+    assert resp.status_code == 401
+    data = resp.get_json()
+    assert data.get("login_required") is True
+    assert "Session expired" in data.get("error", "")
+    print("OK idle session fetch returns 401 json")
+
+
+def test_testing_uses_isolated_database():
+    app = create_app(testing=True)
+    uri = app.config["SQLALCHEMY_DATABASE_URI"]
+    assert ":memory:" in uri
+    assert "reviewbridge.db" not in uri.replace("\\", "/")
+
+    with app.app_context():
+        engine_url = str(db.engine.url)
+        assert ":memory:" in engine_url
+    print("OK testing uses isolated database")
+
+
+def test_database_uri_is_canonical_absolute():
+    app = create_app(testing=False)
+    uri = app.config["SQLALCHEMY_DATABASE_URI"].replace("\\", "/")
+    assert "/instance/instance/" not in uri
+    assert uri.endswith("/instance/reviewbridge.db")
+
+    with app.app_context():
+        engine_url = str(db.engine.url).replace("\\", "/")
+        assert "/instance/instance/" not in engine_url
+        assert engine_url.endswith("/instance/reviewbridge.db")
+    print("OK database uri is canonical absolute")
+
+
+def test_signup_existing_email_logs_in_with_password():
+    app = _test_app()
+    client = app.test_client()
+    email = "signup-dup-ok@test.local"
+    password = "testpass123"
+
+    _signup_client(client, email=email, password=password)
+    client.post("/auth/logout")
+
+    resp = client.post(
+        "/auth/signup",
+        data={
+            "email": email,
+            "display_name": "Dup",
+            "password": password,
+            "confirm_password": password,
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/auth/login" not in resp.headers.get("Location", "")
+
+    history = client.get("/history")
+    assert history.status_code == 200
+    print("OK signup existing email logs in with password")
+
+
+def test_signup_existing_email_wrong_password_redirects_login():
+    app = _test_app()
+    client = app.test_client()
+    email = "signup-dup-bad@test.local"
+    password = "testpass123"
+
+    _signup_client(client, email=email, password=password)
+    client.post("/auth/logout")
+
+    resp = client.post(
+        "/auth/signup",
+        data={
+            "email": email,
+            "display_name": "Dup",
+            "password": "wrongpassword99",
+            "confirm_password": "wrongpassword99",
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    loc = resp.headers.get("Location", "")
+    assert "/auth/login" in loc
+    assert "email=" in loc
+    assert email.replace("@", "%40") in loc or email in loc
+
+    history = client.get("/history")
+    assert history.status_code == 302
+    assert "/auth/login" in history.headers.get("Location", "")
+
+    login_page = client.get(f"/auth/login?email={email}")
+    assert login_page.status_code == 200
+    assert email in login_page.get_data(as_text=True)
+    print("OK signup existing email wrong password redirects login")
+
+
 if __name__ == "__main__":
     test_home_page_loads()
     test_home_demo_workspace_markup()
+    test_analysis_empty_onboarding_copy()
     test_analysis_empty_shows_guided_onboarding()
     test_clean_no_job_shows_pipeline()
     test_clean_clears_stale_snapshot()
@@ -1810,12 +2189,14 @@ if __name__ == "__main__":
     test_search_js_play_loading_state()
     test_form_switch_refined_styles()
     test_app_nav_has_home_link()
+    test_flash_messages_shared()
     test_sticky_nav_scroll_offset_css()
     test_footer_sticky_layout_css()
     test_dead_css_removed()
     test_landing_nav_modern_theme()
     test_export_download_options()
     test_nav_scroll_shared_js()
+    test_nav_transition_assets()
     test_history_page_no_dashboard_charts()
     test_history_scrollable_layout()
     test_storage_health_endpoint()
@@ -1846,11 +2227,24 @@ if __name__ == "__main__":
     test_logged_in_process_creates_mock_ticket()
     test_history_requires_login()
     test_settings_requires_login()
+    test_delete_account_modal_markup()
+    test_delete_account_requires_confirm_phrase()
     test_history_user_scoped()
+    test_idle_session_expires()
+    test_idle_session_touch_keeps_login()
+    test_idle_session_fetch_returns_401_json()
+    test_testing_uses_isolated_database()
+    test_database_uri_is_canonical_absolute()
+    test_signup_existing_email_logs_in_with_password()
+    test_signup_existing_email_wrong_password_redirects_login()
     test_disabled_integration_uses_mock_not_env()
     test_enabled_incomplete_integration_uses_mock()
     test_integrations_ui_split_cards()
     test_jira_adf_description_format()
+    test_user_initials_property()
+    test_avatar_nav_markup()
+    test_settings_profile_avatar_markup()
+    test_avatar_route_requires_login()
     test_stale_job_status()
     test_analysis_prunes_stale_active_job()
     test_dismiss_active()

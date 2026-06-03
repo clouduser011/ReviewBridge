@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from '_macros.html' import user_avatar %}
 
 {% block title %}Account settings — ReviewBridge{% endblock %}
 {% block extra_head %}
@@ -6,6 +7,9 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/settings-integrations.js') }}"></script>
+{% if active_tab == 'danger' %}
+<script src="{{ url_for('static', filename='js/settings-delete-account.js') }}"></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -29,8 +33,16 @@
 <div class="rb-card">
   <div class="rb-card-body">
     <h2 class="h5 mb-3">Profile</h2>
-    <form method="post" action="{{ url_for('account.settings', tab='profile') }}">
+    <form method="post" action="{{ url_for('account.settings', tab='profile') }}" enctype="multipart/form-data">
       <input type="hidden" name="form_type" value="profile">
+      <div class="profile-avatar-row">
+        {{ user_avatar(current_user, 'md', has_avatar) }}
+        <div>
+          <label class="form-label" for="avatar">Profile photo</label>
+          <input type="file" class="form-control form-control-sm" id="avatar" name="avatar" accept="image/jpeg,image/png,image/webp">
+          <p class="form-text mb-0">JPG, PNG, or WebP — max 2 MB. Shown in the navigation bar when signed in.</p>
+        </div>
+      </div>
       <div class="row g-3">
         <div class="col-md-6">
           <label class="form-label" for="display_name">Display name</label>
@@ -54,6 +66,12 @@
       </div>
       <button type="submit" class="btn rb-btn-primary mt-3">Save profile</button>
     </form>
+    {% if has_avatar %}
+    <form method="post" action="{{ url_for('account.settings', tab='profile') }}" class="mt-2">
+      <input type="hidden" name="form_type" value="remove_avatar">
+      <button type="submit" class="btn btn-sm rb-btn-outline">Remove photo</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -153,20 +171,65 @@
 {% if active_tab == 'danger' %}
 <div class="settings-danger-zone">
   <h3>Delete account</h3>
-  <p class="small text-muted">This permanently removes your account, reviews, tickets, logs, and integration settings.</p>
-  <form method="post" action="{{ url_for('account.delete_account') }}" id="deleteAccountForm" class="mt-3">
-    <div class="row g-3">
-      <div class="col-md-6">
-        <label class="form-label" for="confirm_email">Confirm your email</label>
-        <input type="email" class="form-control" id="confirm_email" name="confirm_email" required autocomplete="off" placeholder="{{ current_user.email }}">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label" for="password">Password</label>
-        <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
+  <p class="small text-muted mb-0">This permanently removes your account, reviews, tickets, logs, and integration settings. You will be asked to confirm before anything is deleted.</p>
+  <button type="button" class="btn btn-danger mt-3" id="deleteAccountOpen" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+    Delete my account permanently
+  </button>
+</div>
+
+<form method="post" action="{{ url_for('account.delete_account') }}" id="deleteAccountForm" novalidate>
+  <input type="hidden" name="confirm_phrase" id="confirm_phrase" value="">
+  <div class="modal fade rb-delete-modal" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="rb-delete-modal-header">
+          <div class="rb-delete-modal-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="modal-title h5 mb-1" id="deleteAccountModalTitle">Delete your account?</h2>
+            <p class="rb-delete-modal-subtitle mb-0" id="deleteAccountModalDesc">This action cannot be undone.</p>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <div class="rb-delete-step rb-delete-step--1" data-delete-step="1">
+            <p class="small text-muted mb-2">The following will be permanently removed:</p>
+            <ul class="rb-delete-impact-list small mb-3">
+              <li>Your profile and sign-in credentials</li>
+              <li>Saved review history and analysis batches</li>
+              <li>Tickets and processing logs</li>
+              <li>Jira and Zendesk integration settings</li>
+            </ul>
+            <label class="form-label" for="deletePhraseInput">Type <strong>delete</strong> to continue</label>
+            <input type="text" class="form-control" id="deletePhraseInput" autocomplete="off" spellcheck="false" placeholder="delete" aria-describedby="deletePhraseHint">
+            <p class="form-text mb-0" id="deletePhraseHint">Confirmation is case-insensitive.</p>
+          </div>
+
+          <div class="rb-delete-step rb-delete-step--2 d-none" data-delete-step="2">
+            <button type="button" class="btn btn-link btn-sm rb-delete-back px-0 mb-2" id="deleteAccountBack">&larr; Back</button>
+            <p class="small text-muted mb-3">Enter your email and password to confirm identity.</p>
+            <div class="mb-3">
+              <label class="form-label" for="confirm_email">Confirm your email</label>
+              <input type="email" class="form-control" id="confirm_email" name="confirm_email" autocomplete="off" placeholder="{{ current_user.email }}">
+            </div>
+            <div class="mb-0">
+              <label class="form-label" for="password">Password</label>
+              <input type="password" class="form-control" id="password" name="password" autocomplete="current-password">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer rb-delete-modal-footer">
+          <button type="button" class="btn rb-btn-outline" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn rb-btn-primary" id="deleteAccountContinue" disabled>Continue</button>
+          <button type="submit" class="btn btn-danger d-none" id="deleteAccountSubmit">Delete permanently</button>
+        </div>
       </div>
     </div>
-    <button type="submit" class="btn btn-danger mt-3">Delete my account permanently</button>
-  </form>
-</div>
+  </div>
+</form>
 {% endif %}
 {% endblock %}

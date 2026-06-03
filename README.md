@@ -33,6 +33,7 @@ Auth URLs: `/auth/login`, `/auth/signup`, `/account/settings`
 
 - **Signup:** min 8 characters, instant login after account creation
 - **Sign in:** email/password
+- **Session:** auto logout after 30 minutes of inactivity (set `SESSION_IDLE_TIMEOUT_MINUTES` in `.env`)
 - **Profile:** display name, optional password change
 - **Delete account:** password + email confirmation
 
@@ -137,7 +138,8 @@ python scripts/test_pipeline.py
 
 ## Notes
 
-- **Database**: default SQLite file is `instance/reviewbridge.db`. If an older `instance/review_analyzer.db` exists and the new file does not, the app uses the legacy file automatically. Override with `DATABASE_URL` in `.env`.
+- **Database**: SQLite file is always `instance/reviewbridge.db` (absolute path). Legacy or nested copies under `instance/instance/` are migrated automatically on first run (best source by user/review counts). Do not set `DATABASE_URL=sqlite:///instance/...` in `.env` — that creates a nested duplicate database. Keep `SECRET_KEY` stable across restarts so sessions stay valid. Sign up once after a fresh install; your account and History live in the production DB file.
+- **Smoke tests**: `python scripts/test_pipeline.py` uses an in-memory database and does not modify `instance/reviewbridge.db`.
 - **Storage diagnostics**: `GET /api/storage-health` returns JSON comparing review and ticket counts (useful if tickets seem higher than reviews).
 - The analysis workspace (`/analysis`) is intentionally **clean** on each visit or refresh. After a fetch or upload you are redirected to `/analysis?since=<iso-timestamp>` to view that batch; use **History** (when signed in) for all stored data.
 - Legacy URLs redirect for backward compatibility: `/dashboard` → `/analysis`; `/export/dashboard.csv` and `/export/dashboard.xlsx` delegate to the analysis export endpoints; `POST /dashboard/clear` clears the current analysis batch.

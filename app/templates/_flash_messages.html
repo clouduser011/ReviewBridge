@@ -1,0 +1,12 @@
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="rb-flash-messages" data-flash-root>
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }} alert-dismissible fade show{% if category in ('info', 'success') %} js-alert-auto-hide{% endif %}" role="alert"{% if category in ('info', 'success') %} data-auto-hide-ms="4000"{% endif %}>
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}

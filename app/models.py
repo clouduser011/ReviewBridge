@@ -37,6 +37,16 @@ class User(UserMixin, db.Model):
     def label(self) -> str:
         return (self.display_name or "").strip() or self.email.split("@")[0]
 
+    @property
+    def initials(self) -> str:
+        label = self.label.strip()
+        if not label:
+            return "?"
+        parts = label.split()
+        if len(parts) >= 2:
+            return (parts[0][0] + parts[1][0]).upper()
+        return label[:2].upper()
+
 
 class UserIntegrationSettings(db.Model):
     id = db.Column(db.Integer, primary_key=True)

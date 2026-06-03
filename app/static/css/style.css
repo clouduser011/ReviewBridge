@@ -956,3 +956,72 @@
     max-height: min(320px, 40vh);
   }
 }
+
+.rb-nav-account {
+  display: inline-flex;
+  align-items: center;
+}
+
+.rb-nav-account--landing {
+  margin-inline-end: 0.15rem;
+}
+
+.rb-nav-avatar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  line-height: 1;
+  box-shadow: none;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.rb-nav-avatar-toggle::after {
+  display: none;
+}
+
+.rb-nav-avatar-toggle:hover,
+.rb-nav-avatar-toggle:focus-visible,
+.rb-nav-avatar-toggle.show {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  transform: translateY(-1px);
+  outline: none;
+  background: transparent;
+  border: none;
+}
+
+.rb-nav-account-menu {
+  min-width: 12rem;
+  max-width: min(16rem, calc(100vw - 1.5rem));
+}
+
+.rb-nav-account-menu .dropdown-header {
+  max-width: 100%;
+}
+
+.rb-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rb-avatar--sm { width: 32px; height: 32px; font-size: 0.72rem; }
+.rb-avatar--md { width: 64px; height: 64px; font-size: 1.25rem; }
+.rb-avatar--lg { width: 96px; height: 96px; font-size: 1.75rem; }
+
+.rb-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

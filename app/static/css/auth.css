@@ -302,3 +302,94 @@
   display: none !important;
 }
 
+.profile-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Delete account confirmation modal */
+.rb-delete-modal .modal-dialog {
+  max-width: 28rem;
+}
+
+.rb-delete-modal .modal-content {
+  border: 1px solid var(--rb-border);
+  border-radius: var(--rb-radius-lg);
+  box-shadow: var(--rb-shadow-lg);
+  overflow: hidden;
+}
+
+.rb-delete-modal-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  padding: 1.25rem 1.25rem 0;
+}
+
+.rb-delete-modal-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 999px;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.rb-delete-modal-subtitle {
+  font-size: 0.875rem;
+  color: var(--rb-text-muted);
+}
+
+.rb-delete-modal .modal-body {
+  padding: 1rem 1.25rem 0.25rem;
+}
+
+.rb-delete-impact-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--rb-text-muted);
+}
+
+.rb-delete-impact-list li + li {
+  margin-top: 0.25rem;
+}
+
+.rb-delete-modal-footer {
+  border-top: 1px solid var(--rb-border);
+  padding: 1rem 1.25rem 1.25rem;
+  gap: 0.5rem;
+}
+
+.rb-delete-back {
+  color: var(--rb-text-muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.rb-delete-back:hover {
+  color: var(--rb-text);
+}
+
+.rb-delete-modal #deletePhraseInput.is-valid {
+  border-color: #22c55e;
+}
+
+.rb-delete-modal #deletePhraseInput.is-valid:focus {
+  box-shadow: 0 0 0 0.2rem rgba(34, 197, 94, 0.2);
+}
+
+@media (max-width: 575.98px) {
+  .rb-delete-modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .rb-delete-modal-footer .btn {
+    width: 100%;
+  }
+}
+

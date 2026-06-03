@@ -9,6 +9,14 @@ html:has(.landing-body) {
   scroll-padding-top: var(--rb-nav-landing-capsule-offset);
 }
 
+#top,
+#features,
+#access,
+#insights,
+#how-it-works {
+  scroll-margin-top: var(--rb-nav-landing-capsule-offset);
+}
+
 .landing-body h1,
 .landing-body h2,
 .landing-body h3 {
@@ -17,7 +25,7 @@ html:has(.landing-body) {
 
 .landing-container {
   width: 100%;
-  max-width: 1140px;
+  max-width: 1320px;
   margin: 0 auto;
   padding-left: 1.25rem;
   padding-right: 1.25rem;
@@ -25,7 +33,7 @@ html:has(.landing-body) {
 
 .landing-hero {
   position: relative;
-  padding: calc(var(--rb-nav-landing-capsule-offset) + 4rem) 0 5rem;
+  padding: calc(var(--rb-sticky-nav-offset) + 3rem) 0 5rem;
   color: #fff;
   overflow: hidden;
 }
@@ -142,6 +150,78 @@ html:has(.landing-body) {
   margin-bottom: 0;
 }
 
+/* Access model section */
+.landing-access-card {
+  height: 100%;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--rb-radius-lg);
+  padding: 1.5rem 1.75rem;
+}
+
+.landing-access-card--signed-in {
+  border-color: #bfdbfe;
+  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+}
+
+.landing-access-card h3 {
+  font-size: 1.15rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.landing-access-lead {
+  font-size: 0.88rem;
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+.landing-access-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.landing-access-list li {
+  position: relative;
+  padding-left: 1.35rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.92rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.landing-access-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.landing-access-card--signed-in .landing-access-list li::before {
+  background: #2563eb;
+}
+
+.btn-landing-outline {
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 0.5rem 1.25rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-landing-outline:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12);
+  color: #0f172a;
+}
+
 .landing-trust {
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
@@ -182,7 +262,7 @@ html:has(.landing-body) {
 
 .landing-section-head {
   text-align: center;
-  max-width: 640px;
+  max-width: 720px;
   margin: 0 auto 3rem;
 }
 

@@ -13,6 +13,9 @@
       <p class="rb-page-subtitle">Fetch Google Play reviews, run sentiment analysis, and route tickets—all in one place.</p>
     </div>
     <div class="rb-page-actions">
+      {% if is_authenticated %}
+      <a href="{{ url_for('main.history') }}" class="btn btn-sm rb-btn-outline">History</a>
+      {% endif %}
       {% if has_analysis_export_data %}
       <div class="dropdown">
         <button class="btn btn-sm rb-btn-outline dropdown-toggle" type="button" data-bs-toggle="dropdown">Download</button>
@@ -51,16 +54,8 @@
         <span class="rb-eyebrow rb-eyebrow-dark rb-onboarding-eyebrow">Get started</span>
         <h2 id="analysis-empty-title" class="rb-onboarding-title mb-0">Run your first analysis</h2>
       </div>
-      <div class="rb-onboarding-actions d-flex flex-wrap gap-2">
-        <a href="#dataImportCard" class="btn btn-sm rb-btn-primary">Go to data import</a>
-        {% if is_authenticated %}
-        <a href="{{ url_for('main.history') }}" class="btn btn-sm rb-btn-outline">View history</a>
-        {% else %}
-        <a href="{{ url_for('auth.login', next=url_for('main.history')) }}" class="btn btn-sm rb-btn-outline">Sign in for history</a>
-        {% endif %}
-      </div>
     </div>
-    <p class="rb-onboarding-lead text-muted mb-2">Fetch reviews, analyze sentiment, and generate actionable tickets.</p>
+    <p class="rb-onboarding-lead text-muted mb-2">Free to explore — sign in to save History and create Jira/Zendesk tickets.</p>
     <ol class="analysis-onboarding-steps rb-onboarding-stepper list-unstyled mb-0">
       <li class="analysis-onboarding-step" title="Search Google Play or use a quick pick beside import. Set store region to match your device.">
         <span class="analysis-onboarding-num">1</span>
@@ -73,14 +68,14 @@
         <span class="analysis-onboarding-num">2</span>
         <div class="rb-onboarding-step-text">
           <strong>Import reviews</strong>
-          <p class="text-muted small mb-0">Import live Play reviews or upload a CSV for offline analysis.</p>
+          <p class="text-muted small mb-0">Use the Google Play or CSV tab. Watch pipeline progress as reviews download and analyze.</p>
         </div>
       </li>
-      <li class="analysis-onboarding-step" title="Charts, sentiment breakdown, and Jira/Zendesk recommendations appear after analysis completes.">
+      <li class="analysis-onboarding-step" title="Charts, sentiment breakdown, review filters, and Jira/Zendesk ticket strip appear after analysis completes.">
         <span class="analysis-onboarding-num">3</span>
         <div class="rb-onboarding-step-text">
           <strong>View insights</strong>
-          <p class="text-muted small mb-0">Charts, sentiment breakdown, and Jira/Zendesk recommendations appear here after analysis completes.</p>
+          <p class="text-muted small mb-0">Charts, filterable reviews, and the Jira/Zendesk platform strip appear here when analysis completes.</p>
         </div>
       </li>
     </ol>
