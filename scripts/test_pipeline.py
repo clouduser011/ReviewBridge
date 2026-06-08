@@ -158,10 +158,12 @@ def test_app_nav_has_home_link():
 
     assert "_site_nav.html" in base_html
     assert "nav_mode = 'app'" in base_html
-    assert "nav-transition.js" in base_html
+    assert "nav-scroll.js" in base_html
     assert "_site_nav.html" in landing_base
     assert "nav_mode = 'landing'" in landing_base
-    assert "nav-transition.js" in landing_base
+    assert "nav-scroll.js" in landing_base
+    assert "nav-transition.js" not in base_html
+    assert "nav-transition.js" not in landing_base
 
     pills_landing = site_nav.split("{% if nav_mode == 'landing' %}")[1].split("{% endif %}")[0]
     actions_section = site_nav.split("rb-nav-actions")[1]
@@ -173,18 +175,17 @@ def test_app_nav_has_home_link():
     assert app_match, "app nav actions block not found"
     app_actions = app_match.group(1)
     landing_match = re.search(
-        r"\{% else %\}\n      \{% if is_authenticated %\}(.*?)\n      \{% endif %\}\n    </div>",
+        r"\{% else %\}\n      <a href=\"\{\{ url_for\('main.analysis'\) \}\}\".*?\n      \{% endif %\}\n    </div>",
         actions_section,
         re.DOTALL,
     )
     assert landing_match, "landing nav actions block not found"
-    landing_actions = landing_match.group(1)
+    landing_actions = landing_match.group(0)
 
     assert "rb-nav-pills--shell" in site_nav
     assert "rb-nav-home-action" in app_actions
     assert "main.home" in app_actions
     assert ">Home</a>" in app_actions
-    assert "data-nav-transition=\"to-landing\"" in app_actions
     assert "main.analysis" in app_actions
     assert ">Analysis</a>" in app_actions
     assert "rb-nav-action" in app_actions
@@ -199,16 +200,13 @@ def test_app_nav_has_home_link():
     assert "rb-nav-pills-indicator" in pills_landing
     assert "rb-nav-section-links" in pills_landing
     assert "data-nav-sections" in pills_landing
-    assert "rb-nav-home-ghost" in site_nav
-    assert "data-nav-home-target" in site_nav
-    assert "rb-nav-flight-layer" in site_nav
     assert ">Home</a>" in pills_landing
-    assert "data-nav-transition=\"to-app\"" in landing_actions
     assert "main.analysis" in landing_actions
     assert ">Start analysis</a>" in landing_actions
     assert "main.history" not in landing_actions
     assert "auth.login" in landing_actions
     assert "auth.signup" in landing_actions
+    assert landing_actions.index("main.analysis") < landing_actions.index("auth.login")
     print("OK app nav has home link")
 
 
@@ -315,11 +313,8 @@ def test_landing_nav_modern_theme():
     assert "rb-nav-inner--unified" in site_nav
     assert "_site_nav.html" in landing_base
     assert "rb-nav-section-links" in theme_css
-    assert "--rb-nav-pills-expanded-w" in theme_css
-    assert "is-nav-leaving-landing" in theme_css
-    assert "is-nav-entering-landing" in theme_css
-    assert "is-nav-entering-app" in theme_css
-    assert "rb-nav-flight-layer" in theme_css
+    assert "rb-nav-pills-indicator" in theme_css
+    assert "rb-nav-flight-layer" not in theme_css
 
     active_block = theme_css.split(".rb-nav--landing .rb-nav-link.is-active {")[1].split("}")[0]
     assert "color: var(--rb-nav-link-active)" in active_block
@@ -388,7 +383,6 @@ def test_export_download_options():
 
 def test_nav_scroll_shared_js():
     nav_js = (ROOT / "app" / "static" / "js" / "nav-scroll.js").read_text(encoding="utf-8")
-    nav_transition_js = (ROOT / "app" / "static" / "js" / "nav-transition.js").read_text(encoding="utf-8")
     base_html = (ROOT / "app" / "templates" / "base.html").read_text(encoding="utf-8")
     landing_base = (ROOT / "app" / "templates" / "base_landing.html").read_text(encoding="utf-8")
     landing_js = (ROOT / "app" / "static" / "js" / "landing.js").read_text(encoding="utf-8")
@@ -400,47 +394,32 @@ def test_nav_scroll_shared_js():
     assert "nav-scroll.js" in base_html
     assert 'initNavScrolled("appNav")' in base_html
     assert "nav-scroll.js" in landing_base
-    assert "nav-transition.js" in base_html
-    assert "nav-transition.js" in landing_base
-    assert "initNavTransition" in nav_transition_js
-    assert "data-nav-transition" in nav_transition_js
-    assert "is-nav-leaving-landing" in nav_transition_js
-    assert "is-nav-entering-landing" in nav_transition_js
-    assert "data-nav-expand-pending" in nav_transition_js
-    assert "data-nav-expand-pending" in landing_js
+    assert "nav-transition.js" not in base_html
+    assert "nav-transition.js" not in landing_base
+    assert "data-nav-expand-pending" not in landing_js
     assert 'initLandingNavScrollSpy("landingNav")' in landing_js
     assert "data-nav-pills" in site_nav
-    assert "data-nav-transition" in site_nav
+    assert "data-nav-transition" not in site_nav
     print("OK nav scroll shared JS")
 
 
-def test_nav_transition_assets():
+def test_nav_static_assets():
     theme_css = (ROOT / "app" / "static" / "css" / "theme.css").read_text(encoding="utf-8")
-    nav_transition_js = (ROOT / "app" / "static" / "js" / "nav-transition.js").read_text(encoding="utf-8")
     site_nav = (ROOT / "app" / "templates" / "_site_nav.html").read_text(encoding="utf-8")
 
     assert (ROOT / "app" / "templates" / "_site_nav.html").is_file()
-    assert "rb-nav-flight-layer" in site_nav
-    assert "data-nav-flight-layer" in site_nav
-    assert "rb-nav-home-ghost" in site_nav
-    assert "data-nav-home-target" in site_nav
-    assert "data-nav-transition=\"to-app\"" in site_nav
-    assert "data-nav-transition=\"to-landing\"" in site_nav
+    assert not (ROOT / "app" / "static" / "js" / "nav-transition.js").is_file()
+    assert "rb-nav-flight-layer" not in site_nav
+    assert "data-nav-home-target" not in site_nav
+    assert "data-nav-transition" not in site_nav
     assert "rb-nav-home-action" in site_nav
     assert "rb-nav-section-links" in site_nav
     assert "data-nav-sections" in site_nav
-    assert "--rb-nav-pills-expanded-w" in theme_css
-    assert "rb-nav-flight" in theme_css
-    assert "is-nav-leaving-landing" in theme_css
-    assert "is-nav-entering-app" in theme_css
+    assert "rb-nav-pills-indicator" in theme_css
+    assert "rb-nav-flight" not in theme_css
+    assert "is-nav-leaving-landing" not in theme_css
     assert "prefers-reduced-motion: reduce" in theme_css
-    assert "createFlightClone" in nav_transition_js
-    assert "animateFlight" in nav_transition_js
-    assert "measureNavMetrics" in nav_transition_js
-    assert "is-nav-leaving-landing" in nav_transition_js
-    assert "is-nav-entering-landing" in nav_transition_js
-    assert "is-nav-entering-app" in nav_transition_js
-    print("OK nav transition assets")
+    print("OK nav static assets")
 
 
 def test_history_page_no_dashboard_charts():
@@ -1667,6 +1646,83 @@ def test_refetch_refreshes_into_batch():
     print("OK refetch refreshes into batch")
 
 
+def test_auth_pages_modern_markup():
+    login_tpl = (ROOT / "app" / "templates" / "auth" / "login.html").read_text(encoding="utf-8")
+    signup_tpl = (ROOT / "app" / "templates" / "auth" / "signup.html").read_text(encoding="utf-8")
+    base_tpl = (ROOT / "app" / "templates" / "auth" / "_base_auth.html").read_text(encoding="utf-8")
+    auth_css = (ROOT / "app" / "static" / "css" / "auth.css").read_text(encoding="utf-8")
+    auth_js = (ROOT / "app" / "static" / "js" / "auth.js").read_text(encoding="utf-8")
+
+    assert 'extends "auth/_base_auth.html"' in login_tpl
+    assert 'extends "auth/_base_auth.html"' in signup_tpl
+    assert "<!doctype html>" not in login_tpl
+    assert "<!doctype html>" not in signup_tpl
+
+    assert "auth-showcase" in base_tpl
+    assert "auth-bg" in base_tpl
+    assert "auth-container" in base_tpl
+    assert "auth-nav" in base_tpl
+    assert "auth-nav-actions" in base_tpl
+    nav_actions_block = base_tpl.split("auth-nav-actions")[1].split("</div>")[0]
+    assert "main.home" in nav_actions_block
+    assert "main.analysis" in nav_actions_block
+    assert ">Home</a>" in nav_actions_block
+    assert ">Analysis</a>" in nav_actions_block
+    assert "_site_nav.html" not in base_tpl
+    assert "nav_mode = 'auth'" not in base_tpl
+    assert "auth.js" in base_tpl
+    assert "nav-scroll.js" not in base_tpl
+    assert "landing.css" not in base_tpl
+    assert "_auth_showcase.html" not in base_tpl
+    assert not (ROOT / "app" / "templates" / "auth" / "_auth_showcase.html").is_file()
+
+    assert 'name="email"' in login_tpl
+    assert 'name="password"' in login_tpl
+    assert 'name="remember"' in login_tpl
+    assert 'name="display_name"' in signup_tpl
+    assert 'name="confirm_password"' in signup_tpl
+    assert "data-password-toggle" in login_tpl
+    assert "data-auth-form" in login_tpl
+
+    assert ".auth-showcase" in auth_css
+    assert ".auth-container" in auth_css
+    assert "max-width: 1320px" in auth_css
+    assert "auth-showcase-preview" not in auth_css
+    assert ".auth-nav" in auth_css
+    assert ".auth-nav-actions" in auth_css
+    assert ".auth-form-card" in auth_css
+    assert ".auth-field-control" in auth_css
+    assert "prefers-reduced-motion" in auth_css
+    assert "data-password-toggle" in auth_js
+    assert "is-ready" in auth_js
+    assert "is-loading" in auth_js
+
+    app = _test_app()
+    client = app.test_client()
+    login_page = client.get("/auth/login")
+    signup_page = client.get("/auth/signup")
+    assert login_page.status_code == 200
+    assert signup_page.status_code == 200
+    login_html = login_page.get_data(as_text=True)
+    signup_html = signup_page.get_data(as_text=True)
+    assert "auth-showcase" in login_html
+    assert "auth-form-card" in login_html
+    assert "auth-nav" in login_html
+    assert "auth-nav-actions" in login_html
+    assert ">Home</a>" in login_html
+    assert ">Analysis</a>" in login_html
+    assert "auth.js" in login_html
+    assert "nav-scroll.js" not in login_html
+    assert 'name="email"' in login_html
+    assert "Create account" in login_html
+    assert "rb-demo-workspace" not in login_html
+    assert "Analysis workspace" not in login_html
+    assert "auth-showcase" in signup_html
+    assert 'name="confirm_password"' in signup_html
+    assert "rb-demo-workspace" not in signup_html
+    print("OK auth pages modern markup")
+
+
 def test_auth_signup_login_logout():
     app = _test_app()
     client = app.test_client()
@@ -2196,7 +2252,7 @@ if __name__ == "__main__":
     test_landing_nav_modern_theme()
     test_export_download_options()
     test_nav_scroll_shared_js()
-    test_nav_transition_assets()
+    test_nav_static_assets()
     test_history_page_no_dashboard_charts()
     test_history_scrollable_layout()
     test_storage_health_endpoint()
@@ -2222,6 +2278,7 @@ if __name__ == "__main__":
     test_finalize_preserves_api_order_for_newest()
     test_batch_query_orders_by_play_rank()
     test_refetch_refreshes_into_batch()
+    test_auth_pages_modern_markup()
     test_auth_signup_login_logout()
     test_anonymous_process_no_tickets()
     test_logged_in_process_creates_mock_ticket()

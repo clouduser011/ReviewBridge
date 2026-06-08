@@ -34,7 +34,7 @@
       </div>
       <p class="landing-footer-tagline mb-0">AI-driven Google Play review intelligence — Final Year Project</p>
       <div class="landing-footer-links">
-        <a href="{{ url_for('main.analysis') }}" data-nav-transition="to-app">Analysis</a>
+        <a href="{{ url_for('main.analysis') }}">Analysis</a>
         {% if is_authenticated %}
         <a href="{{ url_for('main.history') }}">History</a>
         {% else %}
@@ -47,7 +47,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/nav-scroll.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/nav-transition.js') }}"></script>
   <script src="{{ url_for('static', filename='js/flash-messages.js') }}"></script>
   <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
 </body>

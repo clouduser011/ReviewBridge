@@ -147,19 +147,6 @@ html {
   box-shadow: var(--rb-nav-pill-shadow);
   overflow: visible;
   box-sizing: border-box;
-  transition:
-    width 0.46s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.3s ease;
-}
-
-.rb-nav--landing .rb-nav-pills {
-  width: var(--rb-nav-pills-expanded-w, auto);
-  max-width: none;
-}
-
-.rb-nav-pills.is-nav-pills-collapsed,
-.rb-nav.is-nav-entering-landing:not(.is-nav-expanded) .rb-nav-pills {
-  width: var(--rb-nav-pills-collapsed-w, 6rem);
 }
 
 .rb-nav-pills--shell {
@@ -179,23 +166,7 @@ html {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  overflow: hidden;
-  width: var(--rb-nav-sections-expanded-w, auto);
-  max-width: var(--rb-nav-sections-expanded-w, 42rem);
-  opacity: 1;
   flex-shrink: 0;
-  transition:
-    width 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.rb-nav-section-links.is-nav-sections-collapsed,
-.rb-nav.is-nav-leaving-landing .rb-nav-section-links,
-.rb-nav.is-nav-entering-landing:not(.is-nav-expanded) .rb-nav-section-links {
-  width: 0;
-  max-width: 0;
-  opacity: 0;
 }
 
 .rb-nav-section-links .rb-nav-link {
@@ -206,26 +177,6 @@ html {
   position: relative;
   z-index: 2;
   flex-shrink: 0;
-  transition:
-    transform 0.46s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s ease,
-    color 0.15s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.rb-nav-home-center.is-nav-home-hidden,
-.rb-nav.is-nav-leaving-landing .rb-nav-home-center.is-nav-home-hidden {
-  opacity: 0;
-}
-
-.rb-nav-home-center.is-nav-home-at-target,
-.rb-nav.is-nav-entering-landing:not(.is-nav-expanded) .rb-nav-home-center {
-  transform: translateX(var(--rb-nav-home-delta-x, 0));
-}
-
-.rb-nav.is-nav-entering-landing.is-nav-expanded .rb-nav-home-center {
-  transform: translateX(0);
 }
 
 .rb-nav-actions {
@@ -234,72 +185,6 @@ html {
   gap: 0.625rem;
   flex-shrink: 0;
   position: relative;
-}
-
-.rb-nav-home-ghost {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  visibility: hidden;
-  pointer-events: none;
-  margin: 0;
-}
-
-.rb-nav-home-action {
-  transition:
-    transform 0.46s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.25s ease;
-}
-
-.rb-nav-home-action.is-nav-home-hidden,
-.rb-nav.is-nav-leaving-app .rb-nav-home-action.is-nav-home-hidden {
-  opacity: 0;
-}
-
-.rb-nav-home-action.is-nav-home-awaiting,
-.rb-nav.is-nav-entering-app:not(.is-nav-settled) .rb-nav-home-action {
-  opacity: 0;
-  transform: translateX(calc(var(--rb-nav-home-delta-x, 48px) * -0.15));
-}
-
-.rb-nav.is-nav-entering-app.is-nav-settled .rb-nav-home-action {
-  opacity: 1;
-  transform: none;
-}
-
-.rb-nav.is-nav-leaving-landing .rb-nav-pills-indicator,
-.rb-nav.is-nav-entering-landing:not(.is-nav-expanded) .rb-nav-pills-indicator {
-  opacity: 0;
-}
-
-.rb-nav-flight-layer {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1040;
-  overflow: visible;
-}
-
-.rb-nav-flight {
-  position: fixed;
-  z-index: 1041;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rb-nav-pills,
-  .rb-nav-section-links,
-  .rb-nav-home-center,
-  .rb-nav-home-action {
-    transition: none !important;
-  }
-
-  .rb-nav-home-center.is-nav-home-at-target,
-  .rb-nav.is-nav-entering-landing:not(.is-nav-expanded) .rb-nav-home-center {
-    transform: none;
-  }
 }
 
 .rb-nav--landing .rb-nav-pills-indicator {

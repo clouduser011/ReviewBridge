@@ -6,10 +6,8 @@
       initNavScrolled("landingNav");
     }
 
-    if (!document.documentElement.hasAttribute("data-nav-expand-pending")) {
-      if (typeof initLandingNavScrollSpy === "function") {
-        initLandingNavScrollSpy("landingNav");
-      }
+    if (typeof initLandingNavScrollSpy === "function") {
+      initLandingNavScrollSpy("landingNav");
     }
 
     document.querySelectorAll('#landingNav .rb-nav-primary a[href^="#"]').forEach(function (link) {
