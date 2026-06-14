@@ -199,6 +199,7 @@ def lookup_local_by_package(package_name: str) -> Optional[Dict[str, str]]:
 
 
 def has_strong_local_match(query: str, local_results: List[Dict[str, str]]) -> bool:
+    """True when top local hit is exact/near-exact — skip Play API round-trip."""
     if not local_results:
         return False
     top_score = score_app_match(query, local_results[0])

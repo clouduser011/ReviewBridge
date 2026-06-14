@@ -16,6 +16,8 @@ account_bp = Blueprint("account", __name__, url_prefix="/account")
 
 
 class _StubReview:
+    """Minimal review-shaped object for integration test tickets from account settings."""
+
     source = "ReviewBridge"
     app_name = "Connection Test"
     author = "ReviewBridge"
@@ -178,6 +180,7 @@ def settings():
 @account_bp.route("/delete", methods=["POST"])
 @login_required
 def delete_account():
+    """Permanently remove user, reviews, tickets, logs, integrations, and avatar file."""
     phrase = (request.form.get("confirm_phrase") or "").strip().lower()
     if phrase != "delete":
         flash("Confirmation phrase was missing or incorrect.", "danger")

@@ -1,6 +1,14 @@
+"""NLP analysis and review deduplication helpers.
+
+Sentiment: TextBlob polarity thresholds.
+Category: keyword rules with rating/sentiment fallbacks.
+Dedup: scoped storage IDs so the same Play review can coexist for different owners.
+"""
+
 import hashlib
 from textblob import TextBlob
 
+# Keyword buckets used by classify_category(); first match wins.
 CATEGORY_RULES = {
     "bug": ["bug", "crash", "error", "stuck", "freeze", "lag", "issue", "failed"],
     "feature_request": ["add", "feature", "please include", "need", "wish", "would be great"],
@@ -10,6 +18,7 @@ CATEGORY_RULES = {
 
 
 def stable_review_id(author: str, content: str, rating: int) -> str:
+    """Content fingerprint when Play does not supply a reviewId (CSV uploads)."""
     key = f"{author.strip().lower()}|{content.strip().lower()}|{rating}"
     return hashlib.md5(key.encode("utf-8")).hexdigest()
 
@@ -30,6 +39,7 @@ def review_storage_id(
     content: str,
     rating: int,
 ) -> str:
+    """Prefer Play reviewId; fall back to content hash for CSV rows without Play ids."""
     if play_review_id and str(play_review_id).strip():
         return play_storage_id(str(play_review_id).strip())
     return content_hash_storage_id(app_name, author, content, rating)
@@ -44,6 +54,7 @@ def scoped_storage_id(
     content: str,
     rating: int,
 ) -> str:
+    """Prefix base id with owner so anonymous sessions and users do not collide."""
     base = review_storage_id(app_name, play_review_id, author, content, rating)
     if owner_user_id:
         return f"u{owner_user_id}:{base}"
@@ -116,6 +127,7 @@ def find_existing_review(
 
 
 def analyze_sentiment(text: str) -> tuple[str, float]:
+    """Map TextBlob polarity to positive/negative/neutral plus a 0.5–1.0 confidence score."""
     polarity = TextBlob(text).sentiment.polarity
     if polarity > 0.15:
         return "positive", min(1.0, 0.5 + polarity)
@@ -125,6 +137,7 @@ def analyze_sentiment(text: str) -> tuple[str, float]:
 
 
 def classify_category(text: str, rating: int, sentiment: str) -> str:
+    """Keyword scan first; low ratings + negative sentiment bias toward complaint/support."""
     lowered = text.lower()
     for category, words in CATEGORY_RULES.items():
         if any(word in lowered for word in words):

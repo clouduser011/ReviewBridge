@@ -1,3 +1,4 @@
+/** Auto-dismiss Bootstrap flash alerts and remove empty flash containers. */
 (function () {
   "use strict";
 

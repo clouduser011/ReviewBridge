@@ -1,3 +1,9 @@
+"""SQLAlchemy models for users, reviews, tickets, and integration settings.
+
+Reviews are deduplicated by `review_id` (scoped per user or anonymous session).
+Tickets enforce one row per review via UniqueConstraint on review_id.
+"""
+
 from datetime import datetime
 
 from flask_login import UserMixin
@@ -8,6 +14,8 @@ from . import db
 
 
 class User(UserMixin, db.Model):
+    """Local email/password account. Flask-Login loads users by primary key."""
+
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
@@ -49,6 +57,8 @@ class User(UserMixin, db.Model):
 
 
 class UserIntegrationSettings(db.Model):
+    """Per-user Jira/Zendesk credentials. API tokens stored encrypted (see crypto_utils)."""
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
 
@@ -68,11 +78,15 @@ class UserIntegrationSettings(db.Model):
 
 
 class Review(db.Model):
+    """An analyzed app review. Owned by user_id OR anonymous owner_session_key."""
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
+    # Anonymous visitors get a stable session key so their batch is isolated from others.
     owner_session_key = db.Column(db.String(64), nullable=True, index=True)
     source = db.Column(db.String(120), nullable=False, default="Google Play")
     app_name = db.Column(db.String(200), nullable=False)
+    # Canonical storage id: play:<id>, content hash, or owner-scoped variant (see analyzer.py).
     review_id = db.Column(db.String(200), unique=True, nullable=False)
     author = db.Column(db.String(150), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
@@ -81,14 +95,16 @@ class Review(db.Model):
     category = db.Column(db.String(64), nullable=False)
     confidence = db.Column(db.Float, nullable=False, default=0.5)
     reviewed_at = db.Column(db.DateTime, nullable=True)
-    last_batch_at = db.Column(db.DateTime, nullable=True)
-    play_rank = db.Column(db.Integer, nullable=True)
+    last_batch_at = db.Column(db.DateTime, nullable=True)  # ties review to an analysis batch (?since=)
+    play_rank = db.Column(db.Integer, nullable=True)  # original order from Play pagination
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref=db.backref("reviews", lazy=True))
 
 
 class Ticket(db.Model):
+    """External Jira/Zendesk ticket created from a review. At most one per review."""
+
     __table_args__ = (UniqueConstraint("review_id", name="uq_ticket_review_id"),)
 
     id = db.Column(db.Integer, primary_key=True)
@@ -105,6 +121,8 @@ class Ticket(db.Model):
 
 
 class ProcessingLog(db.Model):
+    """Pipeline audit trail (fetch complete, errors, history cleared). Logged-in users only."""
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True, index=True)
     message = db.Column(db.Text, nullable=False)

@@ -10,6 +10,7 @@ from flask import current_app
 
 
 def _fernet() -> Fernet:
+    # Derive a stable Fernet key from SECRET_KEY so tokens survive restarts (same SECRET_KEY).
     secret = (current_app.config.get("SECRET_KEY") or "dev-secret").encode("utf-8")
     digest = hashlib.sha256(secret).digest()
     key = base64.urlsafe_b64encode(digest)

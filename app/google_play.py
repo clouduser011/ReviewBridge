@@ -1,3 +1,9 @@
+"""Google Play review fetching and app search via google-play-scraper.
+
+Pagination uses continuation tokens with retries/backoff.
+Fetch-all mode walks multiple storefronts without calling reviews_all (memory-safe).
+"""
+
 import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -7,7 +13,7 @@ from .datetime_utils import normalize_play_review_at
 
 log = logging.getLogger(__name__)
 
-_CACHE_TTL_SEC = 900
+_CACHE_TTL_SEC = 900  # 15 min in-memory cache for Play search/package lookups
 _CACHE_MAX = 200
 _SEARCH_CACHE: Dict[str, tuple] = {}
 _PACKAGE_CACHE: Dict[str, tuple] = {}
@@ -31,8 +37,8 @@ def _cache_set(store: Dict[str, tuple], key: str, value, max_size: int):
     store[key] = (time.time() + _CACHE_TTL_SEC, value)
 
 # Play scraping: smaller pages + backoff tend to return steadier continuation tokens.
-_PAGE_BATCH_LIMITED = 120
-_PAGE_BATCH_UNLIMITED = 200
+_PAGE_BATCH_LIMITED = 120   # capped fetch (/fetch with count=N)
+_PAGE_BATCH_UNLIMITED = 200  # fetch-all mode
 _SLEEP_AFTER_PAGE = 0.45
 _MAX_RETRIES_EMPTY = 4
 _RETRY_BASE_SLEEP = 0.6

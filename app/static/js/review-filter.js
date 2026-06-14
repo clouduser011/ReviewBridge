@@ -1,3 +1,7 @@
+/**
+ * Shared review table filter toolbar (category dropdown + visible row count).
+ * Mounted via window.mountReviewTableFilter from analysis and history pages.
+ */
 (function () {
   function mountReviewTableFilter(root) {
     if (!root) return;

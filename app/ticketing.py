@@ -1,3 +1,9 @@
+"""Jira and Zendesk ticket creation with per-user integration and env fallback.
+
+Routing: bug/feature_request → Jira; support/complaint → Zendesk.
+When credentials are missing, returns mock IDs so demos work without external APIs.
+"""
+
 import os
 import re
 from datetime import datetime
@@ -129,7 +135,10 @@ def _plain_text_to_adf(text: str) -> dict:
 
 
 def create_jira_ticket(review, idx: int = 1, integration=None) -> Dict[str, Any]:
-    """Create a real Jira issue if configured; otherwise return mock."""
+    """Create a real Jira issue if configured; otherwise return mock.
+
+    Per-user integration takes precedence when integration is passed (logged-in flow).
+    """
 
     summary = f"[{review.category}] {review.app_name} review by {review.author}"
     description = (
@@ -188,7 +197,10 @@ def create_jira_ticket(review, idx: int = 1, integration=None) -> Dict[str, Any]
 
 
 def create_zendesk_ticket(review, idx: int = 1, integration=None) -> Dict[str, Any]:
-    """Create a real Zendesk ticket if configured; otherwise return mock."""
+    """Create a real Zendesk ticket if configured; otherwise return mock.
+
+    Per-user integration takes precedence when integration is passed (logged-in flow).
+    """
 
     subject = f"Customer Support - {review.app_name} ({review.author})"
     comment = (
@@ -239,6 +251,7 @@ def create_zendesk_ticket(review, idx: int = 1, integration=None) -> Dict[str, A
 
 
 def choose_ticket_platform(category: str) -> str:
+    """Engineering categories go to Jira; customer-facing issues go to Zendesk."""
     if category in {"bug", "feature_request"}:
         return "Jira"
     return "Zendesk"

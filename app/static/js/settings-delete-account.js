@@ -1,3 +1,4 @@
+/** Two-step account deletion modal: type "delete", then confirm email + password. */
 (function () {
   "use strict";
 

@@ -42,6 +42,7 @@ def delete_avatar_file(user_id: int, filename: str | None) -> None:
 
 
 def save_avatar(user_id: int, file_storage: FileStorage) -> str:
+    """Validate, resize to 256px, convert to WebP; filename is always {user_id}.webp."""
     if not file_storage or not file_storage.filename:
         raise ValueError("No file selected.")
 

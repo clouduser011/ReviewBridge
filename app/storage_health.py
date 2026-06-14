@@ -6,7 +6,10 @@ from .models import Review, Ticket
 
 
 def storage_health_report() -> dict:
-    """Summarize review/ticket counts and common duplicate patterns."""
+    """Summarize review/ticket counts and common duplicate patterns.
+
+    Useful when ticket counts look higher than review counts (legacy dedup issues).
+    """
     total_reviews = Review.query.count()
     total_tickets = Ticket.query.count()
 

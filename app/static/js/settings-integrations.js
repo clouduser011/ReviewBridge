@@ -1,3 +1,4 @@
+/** Show/hide Jira and Zendesk credential fields when integration toggles change. */
 (function () {
   function syncCard(card) {
     var toggle = card.querySelector("[data-integration-toggle]");

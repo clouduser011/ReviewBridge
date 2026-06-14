@@ -1,3 +1,4 @@
+{# Flask flash messages; success/info auto-hide via flash-messages.js #}
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
   <div class="rb-flash-messages" data-flash-root>

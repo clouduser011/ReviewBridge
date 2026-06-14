@@ -74,6 +74,9 @@ def _test_app():
     return create_app(testing=True)
 
 
+# --- Template / CSS smoke tests ---
+
+
 def test_analysis_markup():
     html = (ROOT / "app" / "templates" / "analysis.html").read_text(encoding="utf-8")
     filter_partial = (ROOT / "app" / "templates" / "_review_filter_toolbar.html").read_text(encoding="utf-8")

@@ -1,3 +1,9 @@
+/**
+ * Analysis workspace: async fetch/upload pipeline, Chart.js, and app search.
+ *
+ * Flow: POST /fetch/start or /upload/start → poll /fetch/status → POST /fetch/activate
+ *       → redirect to /analysis?since=<batch ISO timestamp>
+ */
 const PIPELINE_PHASES = ["prepare", "load", "analyzing", "ticketing", "finalize"];
 
 function isSkipPositiveTicketsEnabled() {
@@ -66,6 +72,7 @@ function setPipelineStepsPending(steps) {
 }
 
 function updateAnalysisPipeline(data) {
+  // Sync pipeline card UI with server job snapshot (phase, progress, counters).
   const card = document.getElementById("analysisPipelineCard");
   if (!card) return;
 
@@ -480,6 +487,7 @@ function initAdvancedOptionsToggle() {
 }
 
 function initAnalysisPipeline() {
+  // Wire fetch/CSV buttons, job polling, cancel, and post-complete redirect.
   const form = document.getElementById("liveFetchForm");
   const csvForm = document.getElementById("csvUploadForm");
   const card = document.getElementById("analysisPipelineCard");
@@ -816,6 +824,7 @@ function initAnalysisPipeline() {
 }
 
 function initAppSuggestions() {
+  // Debounced local catalog search with Play Store fallback (/api/app-suggestions).
   const input = document.getElementById("appSearchInput");
   const suggestionsBox = document.getElementById("appSuggestions");
   const form = document.getElementById("liveFetchForm");

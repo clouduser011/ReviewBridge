@@ -17,6 +17,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _safe_next_url(raw: str | None) -> str:
+    """Reject open redirects; only allow same-site relative paths."""
     if not raw:
         return url_for("main.analysis")
     if raw.startswith("/") and not raw.startswith("//"):

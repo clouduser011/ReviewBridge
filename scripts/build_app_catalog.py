@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT))
 from app.app_catalog import catalog_path, normalize_app_entry
 
 DEFAULT_TARGET = 6200
-BOOTSTRAP_SEARCH_SKIP_THRESHOLD = 3000
+BOOTSTRAP_SEARCH_SKIP_THRESHOLD = 3000  # skip PK search_terms when catalog already large
 OUTPUT_PATH = catalog_path()
 BUILD_STATE_PATH = OUTPUT_PATH.parent / "app_catalog.build_state.json"
 PROGRESS_PATH = OUTPUT_PATH.parent / "catalog_build.progress.json"
@@ -463,6 +463,7 @@ def _lookup_package(pkg: str, timeout: float = 15.0) -> dict | None:
 
 
 def _bootstrap_pk_priority(by_pkg: dict[str, dict], *, skip_search_terms: bool = False) -> int:
+    """Seed must-have PK apps from pk_priority_apps.json before broad Play search."""
     if not PK_PRIORITY_PATH.is_file():
         _log("No pk_priority_apps.json found; skipping priority bootstrap")
         return 0
@@ -540,6 +541,7 @@ def build_catalog(
     checkpoint_every: int = 25,
     sleep_seconds: float = 0.15,
 ) -> tuple[dict[str, Any], bool, list[str]]:
+    """Main builder loop: PK bootstrap → seed queries × storefronts → periodic checkpoints."""
     queries = seed_queries()
     seeds_total = len(queries)
     by_pkg = _load_existing_apps() if resume else {}

@@ -1,3 +1,4 @@
+/** Landing page: nav scroll spy, smooth anchor links, reveal-on-scroll animations. */
 (function () {
   "use strict";
 

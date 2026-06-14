@@ -1,3 +1,6 @@
+/**
+ * History page: per-app tab strip and review table category filters.
+ */
 (function () {
   function getChips(strip) {
     return Array.from(strip.querySelectorAll(".rb-history-app-chip[role='tab']"));

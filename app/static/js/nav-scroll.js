@@ -1,3 +1,7 @@
+/**
+ * Sticky nav scroll state and landing-page section scroll-spy with pill indicator.
+ * Exposed on window: initNavScrolled, initLandingNavScrollSpy, updateNavPillsIndicator.
+ */
 (function (global) {
   "use strict";
 

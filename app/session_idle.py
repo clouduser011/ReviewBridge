@@ -24,6 +24,7 @@ def _idle_timeout_seconds(app) -> int:
 
 
 def _wants_json_response() -> bool:
+    # Fetch/status endpoints and JSON Accept headers get 401 JSON instead of login redirect.
     if request.path.startswith("/fetch/"):
         return True
     accept = request.headers.get("Accept", "")

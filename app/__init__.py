@@ -1,3 +1,9 @@
+"""Flask application factory, database bootstrap, and schema migrations.
+
+Canonical DB path: instance/reviewbridge.db (absolute URI).
+Legacy nested paths are merged on startup so existing user data is preserved.
+"""
+
 import os
 import shutil
 import sqlite3
@@ -91,6 +97,7 @@ def _migrate_database_files(instance_dir: str) -> None:
 
 
 def _resolve_database_uri() -> str:
+    """Always resolve relative sqlite:/// paths to the canonical absolute DB file."""
     root = _project_root()
     instance_dir = os.path.join(root, "instance")
     os.makedirs(instance_dir, exist_ok=True)
@@ -115,6 +122,7 @@ def _resolve_database_uri() -> str:
 
 
 def create_app(testing=None):
+    """Build Flask app, wire auth, blueprints, and run lightweight SQLite migrations."""
     app = Flask(__name__)
 
     if testing is None:
@@ -158,6 +166,7 @@ def create_app(testing=None):
 
     init_idle_timeout(app)
 
+    # Inject auth helpers into all Jinja templates (current_user, avatar flag).
     @app.context_processor
     def inject_auth_context():
         from flask_login import current_user
@@ -192,6 +201,7 @@ def create_app(testing=None):
     app.register_blueprint(auth_bp)
     app.register_blueprint(account_bp)
 
+    # create_all + lightweight ALTER TABLE migrations for existing SQLite files.
     with app.app_context():
         from . import models
 

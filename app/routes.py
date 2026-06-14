@@ -1,3 +1,14 @@
+"""Main blueprint: analysis workspace, history, imports, exports, and app search.
+
+Pipeline flow:
+  1. POST /fetch/start or /upload/start → background thread
+  2. Client polls GET /fetch/status/<job_id>
+  3. POST /fetch/activate/<job_id> → redirect to /analysis?since=<batch timestamp>
+
+In-memory FETCH_JOBS dict holds job progress (not persisted across process restarts).
+Analysis page is intentionally empty until ?since= is present (clean refresh UX).
+"""
+
 import csv
 import io
 import threading
@@ -54,9 +65,12 @@ except Exception:
     HAS_OPENPYXL = False
 
 main_bp = Blueprint("main", __name__)
+
+# --- In-memory async job store (Play fetch + CSV upload pipelines) ---
 FETCH_JOBS = {}
 FETCH_JOBS_LOCK = threading.Lock()
 
+# Curated apps shown on landing/analysis quick-pick chips.
 POPULAR_APPS = [
     {
         "app_name": "WhatsApp Messenger",
@@ -93,11 +107,13 @@ POPULAR_APPS_BY_NAME = {item["app_name"]: item for item in POPULAR_APPS}
 
 
 def log_message(message: str, level: str = "info", user_id: int | None = None):
+    """Persist a ProcessingLog row (visible on History for logged-in users)."""
     db.session.add(ProcessingLog(message=message, level=level, user_id=user_id))
     db.session.commit()
 
 
 def _owner_scope_filter(owner: OwnerContext):
+    """SQLAlchemy filter: logged-in users see user_id rows; anonymous see session key rows."""
     if owner.user_id:
         return Review.user_id == owner.user_id
     return and_(Review.user_id.is_(None), Review.owner_session_key == owner.owner_session_key)
@@ -132,6 +148,7 @@ def _analysis_view_since() -> datetime | None:
 
 
 def _batch_review_filter(since: datetime):
+    """Match reviews belonging to one import batch (last_batch_at preferred over created_at)."""
     since = _normalize_batch_dt(since)
     return or_(
         Review.last_batch_at == since,
@@ -236,7 +253,7 @@ def _create_ticket_for_review(
 ) -> str | None:
     """Create at most one ticket per review. Returns platform name or None."""
     if not owner or not owner.allow_tickets:
-        return None
+        return None  # Anonymous users never create tickets
     if review.tickets:
         return None
     if skip_positive_tickets and sentiment == "positive":
@@ -287,6 +304,7 @@ def _parse_skip_positive_tickets(raw) -> bool:
 
 
 def _set_job(job_id: str, **kwargs):
+    """Thread-safe update of in-memory fetch/upload job progress."""
     with FETCH_JOBS_LOCK:
         job = FETCH_JOBS.get(job_id, {})
         job.update(kwargs)
@@ -331,6 +349,10 @@ def _process_review(
     skip_positive_tickets: bool = False,
     owner: OwnerContext | None = None,
 ) -> tuple[bool, str, dict]:
+    """Analyze one review: dedupe, insert or refresh, optionally create ticket.
+
+    Returns (ok, reason, meta) where reason is 'processed', 'refreshed', or 'empty'.
+    """
     batch_started_at = _normalize_batch_dt(batch_started_at)  # type: ignore[assignment]
     raw_text = (text or "").strip()
     if not raw_text:
@@ -448,6 +470,7 @@ def _process_reviews_loop(
     skip_positive_tickets: bool = False,
     owner: OwnerContext | None = None,
 ) -> None:
+    """Shared analyze+ticket loop for async Play fetch and CSV upload jobs."""
     total_rows = len(rows)
     processed = 0
     new_count = 0
@@ -583,6 +606,7 @@ def _process_reviews_loop(
 
 
 def _csv_export_rows(rows: list[Review]) -> list[list[str]]:
+    """Flat row list for CSV/Excel data section."""
     out = []
     for idx, r in enumerate(rows, start=1):
         out.append(
@@ -778,6 +802,9 @@ def _build_professional_xlsx(title: str, subtitle: str, rows: list[Review]) -> b
     return out.getvalue()
 
 
+# --- Page routes: home, analysis workspace, history ---
+
+
 @main_bp.route("/")
 def home():
     return render_template("home.html", popular_apps=POPULAR_APPS[:6])
@@ -785,6 +812,7 @@ def home():
 
 @main_bp.route("/analysis")
 def analysis():
+    """Render analysis workspace. Empty unless ?since= points at a completed batch."""
     owner = capture_owner_context()
     since = _analysis_view_since()
     if since is None:
@@ -990,6 +1018,9 @@ def clear_dashboard():
     return clear_analysis()
 
 
+# --- Export routes (CSV + Excel) ---
+
+
 @main_bp.route("/export/analysis.csv")
 def export_analysis_csv():
     owner = capture_owner_context()
@@ -1084,6 +1115,9 @@ def export_history_xlsx():
     )
 
 
+# --- App catalog / suggestion API ---
+
+
 @main_bp.route("/api/app-catalog/status")
 def app_catalog_status():
     return jsonify(catalog_status())
@@ -1095,6 +1129,7 @@ def app_catalog():
 
 
 def _needs_play_fallback(query: str, local: list, limit: int) -> bool:
+    """Hit Play Store API when local catalog has no strong name match."""
     return (
         len(local) == 0
         or len(local) < min(3, limit)
@@ -1156,6 +1191,9 @@ def app_suggestions():
         return jsonify([])
 
     return jsonify(apps)
+
+
+# --- Background workers for async fetch/upload ---
 
 
 def _run_fetch_job(
@@ -1336,6 +1374,9 @@ def _run_csv_job(
             )
 
 
+# --- Async pipeline endpoints (preferred by analysis.js) ---
+
+
 @main_bp.route("/upload/start", methods=["POST"])
 def start_csv_upload():
     file = request.files.get("review_file")
@@ -1408,6 +1449,9 @@ def start_csv_upload():
     worker.start()
 
     return jsonify({"ok": True, "job_id": job_id})
+
+
+# --- Synchronous fallbacks (form POST + redirect, no job polling) ---
 
 
 @main_bp.route("/upload", methods=["POST"])
@@ -1620,6 +1664,7 @@ def dismiss_active_fetch_job():
 
 @main_bp.route("/fetch/activate/<job_id>", methods=["POST"])
 def activate_fetch_batch(job_id: str):
+    """Client calls this when job completes; returns batch timestamp for ?since= redirect."""
     job = _get_job(job_id)
     if not job or job.get("status") != "completed":
         return jsonify({"ok": False, "error": "Job is not ready to activate"}), 400

@@ -1,7 +1,13 @@
+"""Date/time normalization for Play scraper output and CSV imports.
+
+All datetimes are stored as UTC-naive in SQLite; display filters convert to local time.
+"""
+
 from datetime import datetime, timezone
 
 
 def coerce_review_datetime(value) -> datetime | None:
+    """Accept datetime, epoch seconds/ms, or ISO strings; always return UTC-naive."""
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -44,6 +50,7 @@ def parse_csv_review_date(row: dict) -> datetime | None:
 
 
 def utc_naive_to_local(dt: datetime | None) -> datetime | None:
+    """Template filter helper: treat stored naive values as UTC, show in server local TZ."""
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)

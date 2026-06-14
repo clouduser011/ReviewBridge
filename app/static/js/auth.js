@@ -1,3 +1,4 @@
+/** Login/signup page UX: entrance animation, password toggle, submit loading state. */
 (function () {
   "use strict";
 

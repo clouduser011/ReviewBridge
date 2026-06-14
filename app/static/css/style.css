@@ -1,3 +1,5 @@
+/* Analysis workspace and shared app page styles (extends theme.css tokens). */
+
 :root {
   --bg: var(--rb-surface, #f8fafc);
   --primary: var(--rb-accent, #3b82f6);

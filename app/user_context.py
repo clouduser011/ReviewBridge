@@ -21,6 +21,7 @@ class OwnerContext:
 
 
 def get_owner_session_key() -> str:
+    """Stable anonymous owner id stored in Flask session for unauthenticated analysis batches."""
     key = session.get("owner_session_key")
     if not key:
         key = uuid.uuid4().hex
@@ -29,6 +30,7 @@ def get_owner_session_key() -> str:
 
 
 def capture_owner_context() -> OwnerContext:
+    """Snapshot who owns the current request: logged-in user or anonymous session."""
     if current_user.is_authenticated:
         integration = UserIntegrationSettings.query.filter_by(user_id=current_user.id).first()
         allow_tickets = True
@@ -55,6 +57,7 @@ def owner_context_for_worker(
     owner_session_key: str | None,
     allow_tickets: bool,
 ) -> OwnerContext:
+    """Rebuild OwnerContext inside background fetch/upload threads."""
     integration = None
     if user_id:
         integration = UserIntegrationSettings.query.filter_by(user_id=user_id).first()

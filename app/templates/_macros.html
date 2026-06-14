@@ -1,3 +1,4 @@
+{# Reusable Jinja macros for sentiment/category pills and user avatars. #}
 {% macro sentiment_pill(sentiment) -%}
   {% if sentiment == 'positive' %}<span class="sent-pill sent-positive">{{ sentiment }}</span>
   {% elif sentiment == 'negative' %}<span class="sent-pill sent-negative">{{ sentiment }}</span>
